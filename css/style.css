@@ -146,6 +146,12 @@ body {
   margin-bottom: 0;
 }
 
+.section-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
 /* フォーム */
 .form-group {
   margin-bottom: 10px;

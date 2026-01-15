@@ -1,33 +1,31 @@
 /**
- * YouTubeChatCollector - YouTube Data API v3を使用したライブチャット取得
+ * YouTubeChatCollector - InnerTube APIを使用したライブチャット取得
+ * APIキー不要・クォータ制限なし
  */
 class YouTubeChatCollector {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
-    this.liveChatId = null;
-    this.nextPageToken = null;
-    this.pollingInterval = 10000;  // 最小10秒
-    this.minPollingInterval = 10000;  // 最小間隔
+  constructor() {
+    this.continuation = null;
+    this.pollingInterval = 3000;  // InnerTubeはより短い間隔が可能
     this.pollingTimer = null;
     this.isRunning = false;
     this.processedIds = new Set();
-    this.channelNameCache = new Map();  // チャンネル名キャッシュ
-    this.commentedUsers = new Set();    // コメント済みユーザー（初コメント判定用）
+    this.commentedUsers = new Set();  // コメント済みユーザー（初コメント判定用）
 
     // API呼び出しカウンター（デバッグ用）
-    this.apiCallCount = { videos: 0, messages: 0, channels: 0 };
+    this.apiCallCount = { page: 0, chat: 0 };
+
+    // InnerTube APIコンテキスト
+    this.innertubeContext = {
+      client: {
+        clientName: 'WEB',
+        clientVersion: '2.20240101.00.00'
+      }
+    };
 
     // コールバック
     this.onMessage = null;
     this.onError = null;
     this.onStatusChange = null;
-  }
-
-  /**
-   * APIキーを設定
-   */
-  setApiKey(apiKey) {
-    this.apiKey = apiKey;
   }
 
   /**
@@ -71,9 +69,9 @@ class YouTubeChatCollector {
     this._setStatus('connecting');
 
     try {
-      // liveChatIdを取得
-      this.liveChatId = await this._getLiveChatId(videoId);
-      if (!this.liveChatId) {
+      // 動画ページからcontinuationトークンを取得
+      this.continuation = await this._getInitialContinuation(videoId);
+      if (!this.continuation) {
         throw new Error('ライブ配信が見つかりません。配信中の動画URLを指定してください。');
       }
 
@@ -93,217 +91,436 @@ class YouTubeChatCollector {
    * 切断
    */
   async disconnect() {
-    console.log(`[YT] 切断 - API呼び出し統計: videos=${this.apiCallCount.videos}, messages=${this.apiCallCount.messages}, channels=${this.apiCallCount.channels}`);
+    console.log(`[YT] 切断 - API呼び出し統計: page=${this.apiCallCount.page}, chat=${this.apiCallCount.chat}`);
     this.isRunning = false;
     if (this.pollingTimer) {
       clearTimeout(this.pollingTimer);
       this.pollingTimer = null;
     }
-    this.liveChatId = null;
-    this.nextPageToken = null;
+    this.continuation = null;
     this.processedIds.clear();
-    this.commentedUsers.clear();  // 初コメント判定をリセット
-    // チャンネル名キャッシュは保持（再接続時に再利用）
-    // APIカウンターもリセットしない（累計を確認するため）
+    this.commentedUsers.clear();
     this._setStatus('disconnected');
   }
 
   /**
-   * チャンネルIDからチャンネル名を取得（バッチ対応）
+   * 動画ページからライブチャットのcontinuationトークンを取得
    */
-  async _fetchChannelNames(channelIds) {
-    // キャッシュにないIDのみ取得
-    const uncachedIds = channelIds.filter(id => !this.channelNameCache.has(id));
-    if (uncachedIds.length === 0) return;
+  async _getInitialContinuation(videoId) {
+    this.apiCallCount.page++;
+    console.log(`[YT] API呼び出し: ページ取得 (累計: ${this.apiCallCount.page})`);
 
-    // 最大50件ずつ取得（API制限）
-    const batchSize = 50;
-    for (let i = 0; i < uncachedIds.length; i += batchSize) {
-      const batch = uncachedIds.slice(i, i + batchSize);
-      const ids = batch.join(',');
-
-      try {
-        this.apiCallCount.channels++;
-        console.log(`[YT] API呼び出し: channels.list (${batch.length}件, 累計: ${this.apiCallCount.channels})`);
-
-        const url = `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${ids}&key=${this.apiKey}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.items) {
-          for (const item of data.items) {
-            this.channelNameCache.set(item.id, item.snippet.title);
-          }
-        }
-      } catch (error) {
-        console.error('チャンネル名取得エラー:', error);
-      }
-    }
-
-    // キャッシュサイズ制限（メモリリーク防止）
-    if (this.channelNameCache.size > 500) {
-      const entries = Array.from(this.channelNameCache.entries());
-      this.channelNameCache = new Map(entries.slice(-250));
-    }
-  }
-
-  /**
-   * ビデオIDからliveChatIdを取得
-   */
-  async _getLiveChatId(videoId) {
-    const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${this.apiKey}`;
-
-    this.apiCallCount.videos++;
-    console.log(`[YT] API呼び出し: videos.list (累計: ${this.apiCallCount.videos})`);
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(data.error.message || 'YouTube API エラー');
-    }
-
-    if (!data.items || data.items.length === 0) {
-      throw new Error('動画が見つかりません');
-    }
-
-    return data.items[0]?.liveStreamingDetails?.activeLiveChatId || null;
-  }
-
-  /**
-   * チャットメッセージを取得
-   */
-  async _fetchMessages() {
-    if (!this.liveChatId || !this.isRunning) return [];
-
-    let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${this.liveChatId}&part=snippet,authorDetails&key=${this.apiKey}`;
-    if (this.nextPageToken) {
-      url += `&pageToken=${this.nextPageToken}`;
-    }
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
 
     try {
-      this.apiCallCount.messages++;
-      console.log(`[YT] API呼び出し: liveChat/messages.list (累計: ${this.apiCallCount.messages})`);
-
       const response = await fetch(url);
+      const html = await response.text();
+
+      // ytInitialDataからcontinuationを抽出
+      const match = html.match(/ytInitialData\s*=\s*({.+?});\s*<\/script>/);
+      if (!match) {
+        throw new Error('動画データを取得できませんでした');
+      }
+
+      const data = JSON.parse(match[1]);
+
+      // ライブチャットのcontinuationを探す
+      const continuation = this._findLiveChatContinuation(data);
+      return continuation;
+    } catch (error) {
+      console.error('初期データ取得エラー:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ytInitialDataからライブチャットのcontinuationを探す
+   */
+  _findLiveChatContinuation(data) {
+    try {
+      // 方法1: conversationBarからの取得を試行
+      const conversationBar = data?.contents?.twoColumnWatchNextResults?.conversationBar;
+      if (conversationBar?.liveChatRenderer?.continuations) {
+        const cont = conversationBar.liveChatRenderer.continuations[0];
+        return cont?.reloadContinuationData?.continuation ||
+               cont?.invalidationContinuationData?.continuation ||
+               cont?.timedContinuationData?.continuation;
+      }
+
+      // 方法2: フレームワークのupdatesから取得
+      const frameworkUpdates = data?.frameworkUpdates?.entityBatchUpdate?.mutations;
+      if (frameworkUpdates) {
+        for (const mutation of frameworkUpdates) {
+          const payload = mutation?.payload?.liveChatRenderer?.continuations?.[0];
+          if (payload) {
+            return payload?.reloadContinuationData?.continuation ||
+                   payload?.invalidationContinuationData?.continuation;
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      console.error('Continuation探索エラー:', e);
+      return null;
+    }
+  }
+
+  /**
+   * InnerTube APIでチャットメッセージを取得
+   */
+  async _fetchMessages() {
+    if (!this.continuation || !this.isRunning) return [];
+
+    this.apiCallCount.chat++;
+    console.log(`[YT] API呼び出し: live_chat/get_live_chat (累計: ${this.apiCallCount.chat})`);
+
+    const url = 'https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?prettyPrint=false';
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          context: this.innertubeContext,
+          continuation: this.continuation
+        })
+      });
+
       const data = await response.json();
 
       if (data.error) {
-        // 配信終了などのエラー
-        if (data.error.code === 403 || data.error.code === 404) {
-          this.disconnect();
-          this.onError?.(new Error('配信が終了したか、チャットが利用できません'));
-        }
-        throw new Error(data.error.message || 'YouTube API エラー');
+        throw new Error(data.error.message || 'InnerTube API エラー');
       }
 
-      this.nextPageToken = data.nextPageToken;
-      // APIの推奨間隔と最小間隔の大きい方を採用
-      const apiInterval = data.pollingIntervalMillis || 10000;
-      this.pollingInterval = Math.max(apiInterval, this.minPollingInterval);
-      console.log(`[YT] ポーリング間隔: API推奨=${apiInterval}ms, 実際=${this.pollingInterval}ms, 次回予定=${new Date(Date.now() + this.pollingInterval).toLocaleTimeString()}`);
+      // 次のcontinuationを更新
+      const continuations = data?.continuationContents?.liveChatContinuation?.continuations;
+      if (continuations && continuations.length > 0) {
+        const cont = continuations[0];
+        this.continuation = cont?.invalidationContinuationData?.continuation ||
+                           cont?.timedContinuationData?.continuation ||
+                           cont?.reloadContinuationData?.continuation;
 
-      // 新しいメッセージのみを返す
+        // ポーリング間隔を更新（timedContinuationDataにtimeoutMsがある場合）
+        if (cont?.timedContinuationData?.timeoutMs) {
+          this.pollingInterval = Math.max(cont.timedContinuationData.timeoutMs, 1000);
+        }
+      }
+
+      // チャットアクションを取得
+      const actions = data?.continuationContents?.liveChatContinuation?.actions || [];
       const newMessages = [];
-      const channelIdsToFetch = [];
 
-      for (const item of data.items || []) {
-        if (!this.processedIds.has(item.id)) {
-          this.processedIds.add(item.id);
-          const msg = this._parseMessage(item);
+      for (const action of actions) {
+        const item = action?.addChatItemAction?.item;
+        if (!item) continue;
+
+        const msg = this._parseMessage(item);
+        if (msg && !this.processedIds.has(msg.id)) {
+          this.processedIds.add(msg.id);
           newMessages.push(msg);
-
-          // キャッシュにないチャンネルIDを収集
-          if (msg.authorChannelId && !this.channelNameCache.has(msg.authorChannelId)) {
-            channelIdsToFetch.push(msg.authorChannelId);
-          }
         }
       }
 
-      // チャンネル名を一括取得
-      if (channelIdsToFetch.length > 0) {
-        await this._fetchChannelNames(channelIdsToFetch);
-      }
-
-      // キャッシュからチャンネル名を適用
-      for (const msg of newMessages) {
-        if (msg.authorChannelId && this.channelNameCache.has(msg.authorChannelId)) {
-          msg.authorName = this.channelNameCache.get(msg.authorChannelId);
-        }
-      }
-
-      // メモリリーク防止: 古いIDを削除
+      // メモリリーク防止
       if (this.processedIds.size > 1000) {
         const idsArray = Array.from(this.processedIds);
         this.processedIds = new Set(idsArray.slice(-500));
       }
 
+      console.log(`[YT] 取得: ${newMessages.length}件の新規メッセージ, 次回ポーリング: ${this.pollingInterval}ms`);
       return newMessages;
+
     } catch (error) {
       console.error('チャット取得エラー:', error);
-      this.onError?.(error);
+
+      // 配信終了の可能性
+      if (error.message?.includes('not found') || error.message?.includes('ended')) {
+        this.disconnect();
+        this.onError?.(new Error('配信が終了したか、チャットが利用できません'));
+      } else {
+        this.onError?.(error);
+      }
       return [];
     }
   }
 
   /**
-   * APIレスポンスをパース
+   * チャットアイテムをパース
    */
   _parseMessage(item) {
-    const snippet = item.snippet || {};
-    const authorDetails = item.authorDetails || {};
-    const type = snippet.type || 'textMessageEvent';
-    const channelId = authorDetails.channelId || '';
+    // 通常のテキストメッセージ
+    if (item.liveChatTextMessageRenderer) {
+      return this._parseTextMessage(item.liveChatTextMessageRenderer);
+    }
 
-    // 初コメント判定
+    // スーパーチャット
+    if (item.liveChatPaidMessageRenderer) {
+      return this._parsePaidMessage(item.liveChatPaidMessageRenderer);
+    }
+
+    // スーパーステッカー
+    if (item.liveChatPaidStickerRenderer) {
+      return this._parsePaidSticker(item.liveChatPaidStickerRenderer);
+    }
+
+    // 新規メンバー
+    if (item.liveChatMembershipItemRenderer) {
+      return this._parseMembershipItem(item.liveChatMembershipItemRenderer);
+    }
+
+    // メンバーシップギフト購入
+    if (item.liveChatSponsorshipsGiftPurchaseAnnouncementRenderer) {
+      return this._parseMembershipGift(item.liveChatSponsorshipsGiftPurchaseAnnouncementRenderer);
+    }
+
+    // メンバーシップギフト受領
+    if (item.liveChatSponsorshipsGiftRedemptionAnnouncementRenderer) {
+      return this._parseGiftRedemption(item.liveChatSponsorshipsGiftRedemptionAnnouncementRenderer);
+    }
+
+    return null;
+  }
+
+  /**
+   * 通常テキストメッセージをパース
+   */
+  _parseTextMessage(renderer) {
+    const channelId = renderer.authorExternalChannelId || '';
     const isFirstComment = channelId && !this.commentedUsers.has(channelId);
     if (channelId) {
       this.commentedUsers.add(channelId);
     }
 
-    const message = {
-      id: item.id,
-      type: type,
-      authorName: authorDetails.displayName || '',
+    return {
+      id: renderer.id,
+      type: 'textMessageEvent',
+      authorName: renderer.authorName?.simpleText || '',
       authorChannelId: channelId,
-      authorProfileImage: authorDetails.profileImageUrl || '',
-      message: snippet.displayMessage || '',
-      timestamp: new Date(snippet.publishedAt),
-      isOwner: authorDetails.isChatOwner || false,
-      isModerator: authorDetails.isChatModerator || false,
-      isMember: authorDetails.isChatSponsor || false,
-      isFirstComment: isFirstComment,  // 初コメントフラグ
+      authorProfileImage: renderer.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: this._extractMessageText(renderer.message),
+      timestamp: new Date(parseInt(renderer.timestampUsec) / 1000),
+      isOwner: renderer.authorBadges?.some(b => b.liveChatAuthorBadgeRenderer?.icon?.iconType === 'OWNER') || false,
+      isModerator: renderer.authorBadges?.some(b => b.liveChatAuthorBadgeRenderer?.icon?.iconType === 'MODERATOR') || false,
+      isMember: renderer.authorBadges?.some(b => b.liveChatAuthorBadgeRenderer?.customThumbnail) || false,
+      isFirstComment: isFirstComment,
       superchat: null,
       membershipGift: null,
       newSponsor: false
     };
+  }
 
-    // スーパーチャット
-    if (type === 'superChatEvent' || type === 'superStickerEvent') {
-      const details = snippet.superChatDetails || snippet.superStickerDetails || {};
-      message.superchat = {
-        amount: details.amountDisplayString || '',
-        amountMicros: details.amountMicros || '0',
-        currency: details.currency || 'JPY',
-        tier: details.tier || 0
-      };
-      message.message = snippet.superChatDetails?.userComment || snippet.displayMessage || '';
+  /**
+   * スーパーチャットをパース
+   */
+  _parsePaidMessage(renderer) {
+    const channelId = renderer.authorExternalChannelId || '';
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
     }
 
-    // メンバーシップギフト
-    if (type === 'membershipGiftingEvent') {
-      const details = snippet.membershipGiftingDetails || {};
-      message.membershipGift = {
-        count: details.giftMembershipsCount || 0
-      };
+    // 金額をパース (例: "¥500", "$5.00")
+    const amountText = renderer.purchaseAmountText?.simpleText || '';
+    const amountMatch = amountText.match(/[\d,]+\.?\d*/);
+    const amountValue = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+    const currency = amountText.replace(/[\d,.\s]+/g, '').trim() || 'JPY';
+
+    return {
+      id: renderer.id,
+      type: 'superChatEvent',
+      authorName: renderer.authorName?.simpleText || '',
+      authorChannelId: channelId,
+      authorProfileImage: renderer.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: this._extractMessageText(renderer.message),
+      timestamp: new Date(parseInt(renderer.timestampUsec) / 1000),
+      isOwner: false,
+      isModerator: false,
+      isMember: renderer.authorBadges?.some(b => b.liveChatAuthorBadgeRenderer?.customThumbnail) || false,
+      isFirstComment: isFirstComment,
+      superchat: {
+        amount: amountText,
+        amountMicros: String(Math.round(amountValue * 1000000)),
+        currency: currency,
+        tier: this._getSuperchatTier(renderer.headerBackgroundColor)
+      },
+      membershipGift: null,
+      newSponsor: false
+    };
+  }
+
+  /**
+   * スーパーステッカーをパース
+   */
+  _parsePaidSticker(renderer) {
+    const channelId = renderer.authorExternalChannelId || '';
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
     }
 
-    // 新規メンバー
-    if (type === 'newSponsorEvent') {
-      message.newSponsor = true;
+    const amountText = renderer.purchaseAmountText?.simpleText || '';
+    const amountMatch = amountText.match(/[\d,]+\.?\d*/);
+    const amountValue = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+    const currency = amountText.replace(/[\d,.\s]+/g, '').trim() || 'JPY';
+
+    return {
+      id: renderer.id,
+      type: 'superStickerEvent',
+      authorName: renderer.authorName?.simpleText || '',
+      authorChannelId: channelId,
+      authorProfileImage: renderer.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: renderer.sticker?.accessibility?.accessibilityData?.label || '(スタンプ)',
+      timestamp: new Date(parseInt(renderer.timestampUsec) / 1000),
+      isOwner: false,
+      isModerator: false,
+      isMember: false,
+      isFirstComment: isFirstComment,
+      superchat: {
+        amount: amountText,
+        amountMicros: String(Math.round(amountValue * 1000000)),
+        currency: currency,
+        tier: this._getSuperchatTier(renderer.backgroundColor)
+      },
+      membershipGift: null,
+      newSponsor: false
+    };
+  }
+
+  /**
+   * 新規メンバーをパース
+   */
+  _parseMembershipItem(renderer) {
+    const channelId = renderer.authorExternalChannelId || '';
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
     }
 
-    return message;
+    return {
+      id: renderer.id,
+      type: 'newSponsorEvent',
+      authorName: renderer.authorName?.simpleText || '',
+      authorChannelId: channelId,
+      authorProfileImage: renderer.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: this._extractMessageText(renderer.headerSubtext) || '新規メンバー',
+      timestamp: new Date(parseInt(renderer.timestampUsec) / 1000),
+      isOwner: false,
+      isModerator: false,
+      isMember: true,
+      isFirstComment: isFirstComment,
+      superchat: null,
+      membershipGift: null,
+      newSponsor: true
+    };
+  }
+
+  /**
+   * メンバーシップギフト購入をパース
+   */
+  _parseMembershipGift(renderer) {
+    const header = renderer.header?.liveChatSponsorshipsHeaderRenderer;
+    const channelId = header?.authorExternalChannelId || '';
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
+    }
+
+    // ギフト数を抽出
+    const primaryText = header?.primaryText?.runs?.map(r => r.text).join('') || '';
+    const giftMatch = primaryText.match(/(\d+)/);
+    const giftCount = giftMatch ? parseInt(giftMatch[1]) : 1;
+
+    return {
+      id: renderer.id || `gift_${Date.now()}`,
+      type: 'membershipGiftingEvent',
+      authorName: header?.authorName?.simpleText || '',
+      authorChannelId: channelId,
+      authorProfileImage: header?.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: primaryText,
+      timestamp: new Date(),
+      isOwner: false,
+      isModerator: false,
+      isMember: true,
+      isFirstComment: isFirstComment,
+      superchat: null,
+      membershipGift: {
+        count: giftCount
+      },
+      newSponsor: false
+    };
+  }
+
+  /**
+   * メンバーシップギフト受領をパース
+   */
+  _parseGiftRedemption(renderer) {
+    const channelId = renderer.authorExternalChannelId || '';
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
+    }
+
+    return {
+      id: renderer.id,
+      type: 'giftRedemptionEvent',
+      authorName: renderer.authorName?.simpleText || '',
+      authorChannelId: channelId,
+      authorProfileImage: renderer.authorPhoto?.thumbnails?.[0]?.url || '',
+      message: this._extractMessageText(renderer.message) || 'メンバーシップギフトを受け取りました',
+      timestamp: new Date(parseInt(renderer.timestampUsec) / 1000),
+      isOwner: false,
+      isModerator: false,
+      isMember: true,
+      isFirstComment: isFirstComment,
+      superchat: null,
+      membershipGift: null,
+      newSponsor: true
+    };
+  }
+
+  /**
+   * メッセージオブジェクトからテキストを抽出
+   */
+  _extractMessageText(message) {
+    if (!message) return '';
+
+    if (message.simpleText) {
+      return message.simpleText;
+    }
+
+    if (message.runs) {
+      return message.runs.map(run => {
+        if (run.text) return run.text;
+        if (run.emoji) return run.emoji.shortcuts?.[0] || run.emoji.emojiId || '';
+        return '';
+      }).join('');
+    }
+
+    return '';
+  }
+
+  /**
+   * スーパーチャットのティアを背景色から推定
+   */
+  _getSuperchatTier(color) {
+    if (!color) return 1;
+
+    // YouTubeのスパチャ色に基づくティア
+    // 青(1) → 水色(2) → 緑(3) → 黄(4) → オレンジ(5) → マゼンタ(6) → 赤(7)
+    const tierColors = {
+      4280191205: 1,  // 青
+      4278248959: 2,  // 水色
+      4278239141: 3,  // 緑
+      4294947584: 4,  // 黄
+      4293284096: 5,  // オレンジ
+      4290910299: 6,  // マゼンタ
+      4291821568: 7   // 赤
+    };
+
+    return tierColors[color] || 1;
   }
 
   /**
@@ -347,5 +564,10 @@ class YouTubeChatCollector {
    */
   _setStatus(status) {
     this.onStatusChange?.(status);
+  }
+
+  // 互換性のためのダミーメソッド（APIキーは不要）
+  setApiKey(apiKey) {
+    console.log('[YT] InnerTube APIを使用中 - APIキーは不要です');
   }
 }

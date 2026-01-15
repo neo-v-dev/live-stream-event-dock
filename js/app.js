@@ -32,7 +32,6 @@ class App {
       obsStatus: document.getElementById('obs-status'),
 
       // 設定
-      apiKey: document.getElementById('api-key'),
       videoUrl: document.getElementById('video-url'),
       obsAddress: document.getElementById('obs-address'),
       obsPassword: document.getElementById('obs-password'),
@@ -157,7 +156,6 @@ class App {
    */
   _loadSettings() {
     const settings = storage.loadSettings();
-    this.elements.apiKey.value = settings.apiKey || '';
     this.elements.videoUrl.value = settings.videoUrl || '';
     this.elements.obsAddress.value = settings.obsAddress || 'ws://localhost:4455';
     this.elements.obsPassword.value = settings.obsPassword || '';
@@ -168,7 +166,6 @@ class App {
    */
   _saveSettings() {
     const settings = {
-      apiKey: this.elements.apiKey.value,
       videoUrl: this.elements.videoUrl.value,
       obsAddress: this.elements.obsAddress.value,
       obsPassword: this.elements.obsPassword.value
@@ -196,21 +193,15 @@ class App {
    * YouTube接続
    */
   async _connectYouTube() {
-    const apiKey = this.elements.apiKey.value.trim();
     const videoUrl = this.elements.videoUrl.value.trim();
-
-    if (!apiKey) {
-      this._showToast('API Keyを入力してください', 'error');
-      return;
-    }
 
     if (!videoUrl) {
       this._showToast('配信URLを入力してください', 'error');
       return;
     }
 
-    // YouTubeChatCollectorを初期化
-    this.youtubeChat = new YouTubeChatCollector(apiKey);
+    // YouTubeChatCollectorを初期化（InnerTube API使用、APIキー不要）
+    this.youtubeChat = new YouTubeChatCollector();
 
     // コールバック設定
     this.youtubeChat.onStatusChange = (status) => {
