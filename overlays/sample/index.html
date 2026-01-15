@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>サンプルオーバーレイ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- アラート表示エリア -->
+  <div id="alert-container" class="alert-container hidden">
+    <div class="alert-box">
+      <div class="alert-icon">🎉</div>
+      <div class="alert-content">
+        <div class="alert-title" id="alert-title"></div>
+        <div class="alert-message" id="alert-message"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- デバッグ用イベントログ（本番では非表示推奨） -->
+  <div id="debug-log" class="debug-log">
+    <div class="debug-title">受信イベント:</div>
+    <div id="event-list"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+/* サンプルオーバーレイ スタイル */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* アラートコンテナ */
+.alert-container {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+
+.alert-container.hidden {
+  display: none;
+}
+
+/* アラートボックス */
+.alert-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px 30px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.5s ease-out;
+}
+
+.alert-box.fadeOut {
+  animation: slideOut 0.5s ease-in forwards;
+}
+
+.alert-icon {
+  font-size: 48px;
+  animation: bounce 1s infinite;
+}
+
+.alert-content {
+  color: white;
+}
+
+.alert-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.alert-message {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+/* スーパーチャット用スタイル */
+.alert-box.superchat {
+  background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);
+}
+
+.alert-box.superchat .alert-icon {
+  font-size: 40px;
+}
+
+/* アニメーション */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.9);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* デバッグログ（開発時のみ表示） */
+.debug-log {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #0f0;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 10px;
+  border-radius: 4px;
+  max-width: 400px;
+  max-height: 200px;
+  overflow-y: auto;
+  /* 本番環境では以下をコメントアウト解除 */
+  /* display: none; */
+}
+
+.debug-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #fff;
+}
+
+.debug-item {
+  margin-bottom: 4px;
+  word-break: break-all;
+}

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>配信コメントドック</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ヘッダー -->
+    <header class="header">
+      <h1>配信コメントドック</h1>
+      <div class="connection-status">
+        <span id="yt-status" class="status-indicator disconnected">YT</span>
+        <span id="obs-status" class="status-indicator disconnected">OBS</span>
+      </div>
+    </header>
+
+    <!-- タブナビゲーション -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="settings">設定</button>
+      <button class="tab" data-tab="rules">ルール</button>
+      <button class="tab" data-tab="log">ログ</button>
+    </nav>
+
+    <!-- 設定タブ -->
+    <section id="settings" class="tab-content active">
+      <div class="section">
+        <h2>YouTube設定</h2>
+        <div class="form-group">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" placeholder="YouTube Data API v3 キー">
+        </div>
+        <div class="form-group">
+          <label for="video-url">配信URL / 動画ID</label>
+          <input type="text" id="video-url" placeholder="https://youtube.com/watch?v=xxxxx">
+        </div>
+        <div class="button-group">
+          <button id="yt-connect" class="btn btn-primary">接続</button>
+          <button id="yt-disconnect" class="btn btn-secondary" disabled>切断</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>OBS WebSocket設定</h2>
+        <div class="form-group">
+          <label for="obs-address">アドレス</label>
+          <input type="text" id="obs-address" value="ws://localhost:4455">
+        </div>
+        <div class="form-group">
+          <label for="obs-password">パスワード</label>
+          <input type="password" id="obs-password" placeholder="(未設定の場合は空)">
+        </div>
+        <div class="button-group">
+          <button id="obs-connect" class="btn btn-primary">接続</button>
+          <button id="obs-disconnect" class="btn btn-secondary" disabled>切断</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <button id="save-settings" class="btn btn-full">設定を保存</button>
+      </div>
+    </section>
+
+    <!-- ルールタブ -->
+    <section id="rules" class="tab-content">
+      <div class="section">
+        <div class="section-header">
+          <h2>イベントルール</h2>
+          <button id="add-rule" class="btn btn-small btn-primary">+ 追加</button>
+        </div>
+        <div id="rules-list" class="rules-list">
+          <!-- ルールがここに動的に追加される -->
+          <div class="empty-state">ルールがありません</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ログタブ -->
+    <section id="log" class="tab-content">
+      <div class="section">
+        <div class="section-header">
+          <h2>コメントログ</h2>
+          <button id="clear-log" class="btn btn-small btn-secondary">クリア</button>
+        </div>
+        <div id="comment-log" class="comment-log">
+          <!-- コメントがここに動的に追加される -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ルール編集モーダル -->
+    <div id="rule-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">ルールを追加</h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="rule-name">ルール名</label>
+            <input type="text" id="rule-name" placeholder="例: スパチャアラート">
+          </div>
+
+          <div class="form-group">
+            <label for="rule-enabled">
+              <input type="checkbox" id="rule-enabled" checked>
+              有効
+            </label>
+          </div>
+
+          <fieldset class="form-group">
+            <legend>条件</legend>
+            <div class="form-group">
+              <label for="condition-type">条件タイプ</label>
+              <select id="condition-type">
+                <option value="keyword">キーワード含有</option>
+                <option value="command">コマンド (!xxx)</option>
+                <option value="regex">正規表現</option>
+                <option value="superchat">スーパーチャット</option>
+                <option value="membership">メンバーシップ</option>
+                <option value="user">特定ユーザー</option>
+              </select>
+            </div>
+            <div class="form-group" id="condition-value-group">
+              <label for="condition-value">値</label>
+              <input type="text" id="condition-value" placeholder="キーワードまたはパターン">
+            </div>
+            <div class="form-group" id="condition-amount-group" style="display:none;">
+              <label for="condition-amount">最低金額 (円)</label>
+              <input type="number" id="condition-amount" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label for="condition-first-comment">
+                <input type="checkbox" id="condition-first-comment">
+                初コメントのみ
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="condition-moderator">
+                <input type="checkbox" id="condition-moderator">
+                モデレーターのみ
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-group">
+            <legend>アクション</legend>
+            <div class="form-group">
+              <label for="action-type">アクションタイプ</label>
+              <select id="action-type">
+                <option value="switchScene">シーン切替</option>
+                <option value="showSource">ソース表示</option>
+                <option value="hideSource">ソース非表示</option>
+                <option value="toggleSource">ソース表示切替</option>
+                <option value="setText">テキスト設定</option>
+                <option value="enableFilter">フィルター有効</option>
+                <option value="disableFilter">フィルター無効</option>
+                <option value="broadcastEvent">オーバーレイへ送信</option>
+              </select>
+            </div>
+            <div class="form-group" id="action-scene-group">
+              <label for="action-scene">シーン名</label>
+              <input type="text" id="action-scene" placeholder="シーン名">
+            </div>
+            <div class="form-group" id="action-source-group" style="display:none;">
+              <label for="action-source">ソース名</label>
+              <input type="text" id="action-source" placeholder="ソース名">
+            </div>
+            <div class="form-group" id="action-filter-group" style="display:none;">
+              <label for="action-filter">フィルター名</label>
+              <input type="text" id="action-filter" placeholder="フィルター名">
+            </div>
+            <div class="form-group" id="action-text-group" style="display:none;">
+              <label for="action-text">テキスト (${message}, ${user} 使用可)</label>
+              <input type="text" id="action-text" placeholder="${user}: ${message}">
+            </div>
+            <div class="form-group" id="action-event-group" style="display:none;">
+              <label for="action-event">イベント名</label>
+              <input type="text" id="action-event" placeholder="superchat-alert">
+            </div>
+            <div class="form-group" id="action-duration-group" style="display:none;">
+              <label for="action-duration">表示時間 (秒, 0=手動)</label>
+              <input type="number" id="action-duration" value="3" min="0">
+            </div>
+          </fieldset>
+
+          <div class="form-group">
+            <label for="rule-cooldown">クールダウン (秒)</label>
+            <input type="number" id="rule-cooldown" value="0" min="0">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="save-rule" class="btn btn-primary">保存</button>
+          <button id="cancel-rule" class="btn btn-secondary">キャンセル</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- アプリケーションスクリプト（CDN不要・全てローカル） -->
+  <script src="js/storage.js"></script>
+  <script src="js/youtube-chat.js"></script>
+  <script src="js/obs-websocket-client.js"></script>
+  <script src="js/obs-controller.js"></script>
+  <script src="js/event-engine.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
