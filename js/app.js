@@ -32,6 +32,7 @@ class App {
       obsStatus: document.getElementById('obs-status'),
 
       // 設定
+      proxyUrl: document.getElementById('proxy-url'),
       videoUrl: document.getElementById('video-url'),
       obsAddress: document.getElementById('obs-address'),
       obsPassword: document.getElementById('obs-password'),
@@ -156,9 +157,15 @@ class App {
    */
   _loadSettings() {
     const settings = storage.loadSettings();
+    this.elements.proxyUrl.value = settings.proxyUrl || '';
     this.elements.videoUrl.value = settings.videoUrl || '';
     this.elements.obsAddress.value = settings.obsAddress || 'ws://localhost:4455';
     this.elements.obsPassword.value = settings.obsPassword || '';
+
+    // プロキシURLを設定
+    if (settings.proxyUrl) {
+      YouTubeChatCollector.setProxyUrl(settings.proxyUrl);
+    }
   }
 
   /**
@@ -166,11 +173,16 @@ class App {
    */
   _saveSettings() {
     const settings = {
+      proxyUrl: this.elements.proxyUrl.value,
       videoUrl: this.elements.videoUrl.value,
       obsAddress: this.elements.obsAddress.value,
       obsPassword: this.elements.obsPassword.value
     };
     storage.saveSettings(settings);
+
+    // プロキシURLを更新
+    YouTubeChatCollector.setProxyUrl(settings.proxyUrl);
+
     this._showToast('設定を保存しました');
   }
 
@@ -193,12 +205,21 @@ class App {
    * YouTube接続
    */
   async _connectYouTube() {
+    const proxyUrl = this.elements.proxyUrl.value.trim();
     const videoUrl = this.elements.videoUrl.value.trim();
+
+    if (!proxyUrl) {
+      this._showToast('プロキシURLを入力してください', 'error');
+      return;
+    }
 
     if (!videoUrl) {
       this._showToast('配信URLを入力してください', 'error');
       return;
     }
+
+    // プロキシURLを設定
+    YouTubeChatCollector.setProxyUrl(proxyUrl);
 
     // YouTubeChatCollectorを初期化（InnerTube API使用、APIキー不要）
     this.youtubeChat = new YouTubeChatCollector();

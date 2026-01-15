@@ -1,11 +1,16 @@
 /**
  * YouTubeChatCollector - InnerTube APIを使用したライブチャット取得
  * APIキー不要・クォータ制限なし
+ * Cloudflare Workersプロキシ経由でCORS回避
  */
 class YouTubeChatCollector {
+  // プロキシURL（Cloudflare Workersデプロイ後に設定）
+  // 例: 'https://youtube-cors-proxy.your-subdomain.workers.dev'
+  static PROXY_URL = '';
+
   constructor() {
     this.continuation = null;
-    this.pollingInterval = 3000;  // InnerTubeはより短い間隔が可能
+    this.pollingInterval = 3000;  // 3秒間隔
     this.pollingTimer = null;
     this.isRunning = false;
     this.processedIds = new Set();
@@ -26,6 +31,28 @@ class YouTubeChatCollector {
     this.onMessage = null;
     this.onError = null;
     this.onStatusChange = null;
+  }
+
+  /**
+   * プロキシURLを設定
+   */
+  static setProxyUrl(url) {
+    YouTubeChatCollector.PROXY_URL = url;
+  }
+
+  /**
+   * プロキシ経由でfetch
+   */
+  async _proxyFetch(url, options = {}) {
+    const proxyUrl = YouTubeChatCollector.PROXY_URL;
+
+    if (!proxyUrl) {
+      throw new Error('プロキシURLが設定されていません。設定画面でCloudflare WorkersのURLを入力してください。');
+    }
+
+    const targetUrl = `${proxyUrl}?url=${encodeURIComponent(url)}`;
+
+    return fetch(targetUrl, options);
   }
 
   /**
@@ -113,7 +140,7 @@ class YouTubeChatCollector {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
 
     try {
-      const response = await fetch(url);
+      const response = await this._proxyFetch(url);
       const html = await response.text();
 
       // ytInitialDataからcontinuationを抽出
@@ -178,7 +205,7 @@ class YouTubeChatCollector {
     const url = 'https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?prettyPrint=false';
 
     try {
-      const response = await fetch(url, {
+      const response = await this._proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

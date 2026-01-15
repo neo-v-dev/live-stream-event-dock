@@ -28,7 +28,11 @@
     <section id="settings" class="tab-content active">
       <div class="section">
         <h2>YouTube設定</h2>
-        <p class="section-note">InnerTube API使用（APIキー不要）</p>
+        <p class="section-note">InnerTube API使用（APIキー不要・クォータ制限なし）</p>
+        <div class="form-group">
+          <label for="proxy-url">プロキシURL (Cloudflare Workers)</label>
+          <input type="text" id="proxy-url" placeholder="https://youtube-cors-proxy.xxx.workers.dev">
+        </div>
         <div class="form-group">
           <label for="video-url">配信URL / 動画ID</label>
           <input type="text" id="video-url" placeholder="https://youtube.com/watch?v=xxxxx">
