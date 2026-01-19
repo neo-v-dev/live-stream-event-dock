@@ -50,7 +50,7 @@ Chrome拡張機能「YouTube Live Chat to OBS Extension」と連携し、コメ�
 
 1. OBSで **表示** → **ドック** → **カスタムブラウザドック**
 2. 設定:
-   - ドック名: `配信コメントドック`
+   - ドック名: `Live Stream Event Dock`
    - URL: `file:///path/to/live-stream-event-dock/index.html`
 
 **方法B: ブラウザで直接開く**
@@ -71,12 +71,12 @@ Chrome拡張機能「YouTube Live Chat to OBS Extension」と連携し、コメ�
 
 ## 機能説明
 
-### 自動イベント
+### 自動イベント（Live Stream Event API）
 
 OBS接続中、以下のイベントが自動的に送信されます（設定で個別に有効/無効を切り替え可能）:
 
-| イベント名 | 説明 | デフォルト |
-|-----------|------|-----------|
+| イベントタイプ | 説明 | デフォルト |
+|---------------|------|-----------|
 | `FirstComment` | ユーザーのセッション初コメント | 有効 |
 | `SuperChat` | スーパーチャット受信 | 有効 |
 | `Membership` | 新規メンバー加入 | 有効 |
@@ -119,35 +119,41 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
 
 ## イベントデータ形式
 
-### 送信されるイベントの構造
+### OBS CustomEvent の構造
+
+イベントは OBS WebSocket の `BroadcastCustomEvent` で送信されます。
 
 ```javascript
+// OBS CustomEvent の eventData
 {
-  type: "イベントタイプ",
-  timestamp: "2025-01-15T12:34:56.789Z",
-  sessionId: "session_xxxx_yyyy",
-  user: {
-    channelId: "UCxxxxxxxxxx",
-    displayName: "ユーザー名",
-    profileImageUrl: "https://...",
-    isOwner: false,
-    isModerator: false,
-    isMember: true,
-    session: {
-      messageCount: 5,
-      superChatTotal: 1000,
-      superChatCount: 2,
-      giftCount: 0,
-      firstSeenAt: "2025-01-15T12:30:00.000Z"
+  eventName: "LiveStreamEvent",  // 設定で変更可能（デフォルト: LiveStreamEvent）
+  eventData: {
+    type: "FirstComment",        // イベントタイプ
+    timestamp: "2025-01-15T12:34:56.789Z",
+    sessionId: "session_xxxx_yyyy",
+    user: {
+      channelId: "UCxxxxxxxxxx",
+      displayName: "ユーザー名",
+      profileImageUrl: "https://...",
+      isOwner: false,
+      isModerator: false,
+      isMember: true,
+      session: {
+        messageCount: 5,
+        superChatTotal: 1000,
+        superChatCount: 2,
+        giftCount: 0,
+        firstSeenAt: "2025-01-15T12:30:00.000Z"
+      }
+    },
+    payload: {
+      // イベント固有のデータ
     }
-  },
-  payload: {
-    // イベント固有のデータ
   }
 }
 ```
 
-### 主要イベントのpayload
+### イベントタイプ別 payload
 
 #### FirstComment
 ```javascript
@@ -171,6 +177,14 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
 }
 ```
 
+#### Membership
+```javascript
+{
+  type: "new",
+  levelName: "メンバー"
+}
+```
+
 #### MembershipGift
 ```javascript
 {
@@ -181,6 +195,15 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
 }
 ```
 
+#### MemberMilestone
+```javascript
+{
+  memberMonth: 6,
+  memberLevelName: "メンバー",
+  userComment: "半年記念！"
+}
+```
+
 #### SessionStats
 ```javascript
 {
@@ -188,6 +211,13 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
   giftTotal: 25,
   uniqueUsers: 150,
   totalMessages: 500
+}
+```
+
+#### Comment / OwnerComment / ModeratorComment / MemberComment
+```javascript
+{
+  message: "コメント内容"
 }
 ```
 
@@ -217,9 +247,48 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
 3. OBSでブラウザソースとして追加
 4. ドックでルールを設定してイベントを送信
 
+### イベント受信のポイント
+
+```javascript
+// OBS WebSocket でイベントを受信する場合
+obsSocket.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+
+  if (msg.op === 5 && msg.d.eventType === 'CustomEvent') {
+    const { eventName, eventData } = msg.d.eventData;
+
+    // eventName でフィルタ（デフォルト: "LiveStreamEvent"）
+    if (eventName === 'LiveStreamEvent') {
+      const { type, user, payload } = eventData;
+      console.log(`イベント受信: ${type}`, payload);
+    }
+  }
+};
+```
+
 ### サンプル
 
 `overlays/sample/` にサンプルオーバーレイがあります。
+
+---
+
+## テストツール
+
+### Event Listener
+
+`tools/event-listener/index.html` を開くと、イベントの受信状況をリアルタイムで確認できます。
+
+**機能:**
+- OBS WebSocket接続（自動再接続対応）
+- イベントのリアルタイム表示（タイプ別色分け）
+- イベントタイプ・テキストでのフィルタリング
+- 一時停止・クリア・JSONエクスポート
+- イベント詳細のJSON表示
+
+**使い方:**
+1. `tools/event-listener/index.html` をブラウザで開く
+2. OBS WebSocket接続情報を入力して「接続」
+3. ドックからイベントを送信して確認
 
 ---
 
@@ -227,20 +296,24 @@ OBS接続中、以下のイベントが自動的に送信されます（設定�
 
 ```
 live-stream-event-dock/
-├── index.html              # メインUI
+├── index.html                  # メインUI
 ├── css/
-│   └── style.css           # スタイル
+│   └── style.css               # スタイル
 ├── js/
-│   ├── app.js              # メインアプリケーション
-│   ├── obs-controller.js   # OBS WebSocket制御
-│   ├── obs-websocket-client.js  # WebSocketクライアント
-│   ├── event-engine.js     # ルール条件判定エンジン
-│   ├── session-manager.js  # セッション・ユーザー管理
-│   ├── stream-event-sender.js   # イベント送信
-│   └── storage.js          # localStorage管理
+│   ├── app.js                  # メインアプリケーション
+│   ├── obs-controller.js       # OBS WebSocket制御
+│   ├── obs-websocket-client.js # WebSocketクライアント
+│   ├── event-engine.js         # ルール条件判定エンジン
+│   ├── session-manager.js      # セッション・ユーザー管理
+│   ├── stream-event-sender.js  # イベント送信
+│   └── storage.js              # localStorage管理
 ├── overlays/
-│   ├── README.md           # オーバーレイ作成マニュアル
-│   └── sample/             # サンプルオーバーレイ
+│   ├── README.md               # オーバーレイ作成マニュアル
+│   └── sample/                 # サンプルオーバーレイ
+├── tools/
+│   └── event-listener/         # イベント受信テストツール
+├── docs/
+│   └── specs/                  # 仕様書
 └── LICENSE
 ```
 
@@ -265,8 +338,9 @@ live-stream-event-dock/
 ### イベントがオーバーレイに届かない
 
 1. オーバーレイがOBS WebSocketに接続されているか確認
-2. イベント名（タイプ）が一致しているか確認
+2. `eventName` が一致しているか確認（デフォルト: `LiveStreamEvent`）
 3. ブラウザのコンソールでエラーを確認
+4. `tools/event-listener/` で受信状況を確認
 
 ### 設定が保存されない
 
@@ -277,10 +351,13 @@ live-stream-event-dock/
 
 ## 技術仕様
 
-- **OBS WebSocket Protocol**: v5.x
-- **イベント配信方式**: `BroadcastCustomEvent`
-- **ストレージ**: localStorage
-- **外部依存**: なし（Pure JavaScript）
+| 項目 | 内容 |
+|------|------|
+| OBS WebSocket Protocol | v5.x |
+| イベント配信方式 | `BroadcastCustomEvent` |
+| デフォルトイベント名 | `LiveStreamEvent` |
+| ストレージ | localStorage |
+| 外部依存 | なし（Pure JavaScript） |
 
 ---
 

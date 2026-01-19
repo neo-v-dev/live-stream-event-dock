@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Stream Event Listener</title>
+  <style>
+    :root {
+      --bg-primary: #1e1e1e;
+      --bg-secondary: #2d2d2d;
+      --bg-tertiary: #3d3d3d;
+      --text-primary: #ffffff;
+      --text-secondary: #b0b0b0;
+      --text-muted: #808080;
+      --accent-primary: #0078d4;
+      --border-color: #404040;
+
+      /* Event type colors */
+      --color-first-comment: #4caf50;
+      --color-superchat: #ff9800;
+      --color-membership: #9c27b0;
+      --color-milestone: #2196f3;
+      --color-session-stats: #607d8b;
+      --color-comment: #9e9e9e;
+      --color-owner: #f44336;
+      --color-moderator: #4caf50;
+      --color-member: #ff9800;
+      --color-custom: #00bcd4;
+      --color-error: #f44336;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.4;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--color-error);
+    }
+
+    .status-indicator.connected {
+      background: var(--color-first-comment);
+    }
+
+    .status-indicator.connecting {
+      background: var(--color-superchat);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Sections */
+    .section {
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    /* Connection Settings */
+    .connection-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .form-group input {
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #1084d8;
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #4d4d4d;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Filter & Controls */
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-group select,
+    .filter-group input {
+      padding: 4px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .filter-group input {
+      width: 150px;
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .event-count {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .btn-small {
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    .btn-pause.paused {
+      background: var(--color-superchat);
+    }
+
+    /* Event Log */
+    .event-log-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .event-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 16px;
+    }
+
+    .event-item {
+      padding: 8px 12px;
+      margin-bottom: 4px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      border-left: 3px solid var(--text-muted);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .event-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .event-item.selected {
+      background: var(--bg-tertiary);
+      outline: 1px solid var(--accent-primary);
+    }
+
+    .event-item.hidden {
+      display: none;
+    }
+
+    /* Event type colors */
+    .event-item[data-type="FirstComment"] { border-left-color: var(--color-first-comment); }
+    .event-item[data-type="SuperChat"] { border-left-color: var(--color-superchat); }
+    .event-item[data-type="Membership"] { border-left-color: var(--color-membership); }
+    .event-item[data-type="MembershipGift"] { border-left-color: var(--color-membership); }
+    .event-item[data-type="MemberMilestone"] { border-left-color: var(--color-milestone); }
+    .event-item[data-type="SessionStats"] { border-left-color: var(--color-session-stats); }
+    .event-item[data-type="Comment"] { border-left-color: var(--color-comment); }
+    .event-item[data-type="OwnerComment"] { border-left-color: var(--color-owner); }
+    .event-item[data-type="ModeratorComment"] { border-left-color: var(--color-moderator); }
+    .event-item[data-type="MemberComment"] { border-left-color: var(--color-member); }
+    .event-item[data-type="Custom"] { border-left-color: var(--color-custom); }
+
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .event-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    .event-type {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--bg-tertiary);
+    }
+
+    .event-type[data-type="FirstComment"] { color: var(--color-first-comment); }
+    .event-type[data-type="SuperChat"] { color: var(--color-superchat); }
+    .event-type[data-type="Membership"] { color: var(--color-membership); }
+    .event-type[data-type="MembershipGift"] { color: var(--color-membership); }
+    .event-type[data-type="MemberMilestone"] { color: var(--color-milestone); }
+    .event-type[data-type="SessionStats"] { color: var(--color-session-stats); }
+    .event-type[data-type="Comment"] { color: var(--color-comment); }
+    .event-type[data-type="OwnerComment"] { color: var(--color-owner); }
+    .event-type[data-type="ModeratorComment"] { color: var(--color-moderator); }
+    .event-type[data-type="MemberComment"] { color: var(--color-member); }
+    .event-type[data-type="Custom"] { color: var(--color-custom); }
+
+    .event-summary {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .event-summary .user {
+      color: var(--accent-primary);
+      font-weight: 600;
+    }
+
+    .event-summary .amount {
+      color: var(--color-superchat);
+      font-weight: 600;
+    }
+
+    /* Detail Panel */
+    .detail-panel {
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      max-height: 40vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .detail-panel.hidden {
+      display: none;
+    }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .detail-header h3 {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .detail-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .detail-close:hover {
+      color: var(--text-primary);
+    }
+
+    .detail-content {
+      flex: 1;
+      overflow: auto;
+      padding: 12px 16px;
+    }
+
+    .detail-json {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-secondary);
+    }
+
+    .detail-json .key {
+      color: #9cdcfe;
+    }
+
+    .detail-json .string {
+      color: #ce9178;
+    }
+
+    .detail-json .number {
+      color: #b5cea8;
+    }
+
+    .detail-json .boolean {
+      color: #569cd6;
+    }
+
+    .detail-json .null {
+      color: #569cd6;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 40px;
+      font-size: 14px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #505050;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>Live Stream Event Listener</h1>
+      <div class="status">
+        <div id="status-indicator" class="status-indicator"></div>
+        <span id="status-text" class="status-text">未接続</span>
+      </div>
+    </header>
+
+    <!-- Connection Settings -->
+    <div class="section">
+      <div class="section-title">接続設定</div>
+      <div class="connection-form">
+        <div class="form-group">
+          <label for="obs-address">アドレス</label>
+          <input type="text" id="obs-address" value="ws://localhost:4455">
+        </div>
+        <div class="form-group">
+          <label for="obs-password">パスワード</label>
+          <input type="password" id="obs-password" placeholder="(未設定の場合は空)">
+        </div>
+        <div class="form-group">
+          <label for="event-name">イベント名</label>
+          <input type="text" id="event-name" value="LiveStreamEvent">
+        </div>
+        <button id="btn-connect" class="btn btn-primary">接続</button>
+        <button id="btn-disconnect" class="btn btn-secondary" disabled>切断</button>
+      </div>
+    </div>
+
+    <!-- Filter & Controls -->
+    <div class="section">
+      <div class="controls">
+        <div class="filter-group">
+          <label>タイプ:</label>
+          <select id="filter-type">
+            <option value="all">All</option>
+            <option value="FirstComment">FirstComment</option>
+            <option value="SuperChat">SuperChat</option>
+            <option value="Membership">Membership</option>
+            <option value="MembershipGift">MembershipGift</option>
+            <option value="MemberMilestone">MemberMilestone</option>
+            <option value="SessionStats">SessionStats</option>
+            <option value="Comment">Comment</option>
+            <option value="OwnerComment">OwnerComment</option>
+            <option value="ModeratorComment">ModeratorComment</option>
+            <option value="MemberComment">MemberComment</option>
+            <option value="Custom">Custom</option>
+          </select>
+          <label>検索:</label>
+          <input type="text" id="filter-search" placeholder="テキスト検索...">
+        </div>
+        <div class="control-buttons">
+          <span id="event-count" class="event-count">受信: 0件</span>
+          <button id="btn-clear" class="btn btn-secondary btn-small">クリア</button>
+          <button id="btn-pause" class="btn btn-secondary btn-small btn-pause">一時停止</button>
+          <button id="btn-export" class="btn btn-secondary btn-small">エクスポート</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="event-log-container">
+      <div id="event-log" class="event-log">
+        <div class="empty-state">イベント待機中...</div>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div id="detail-panel" class="detail-panel hidden">
+      <div class="detail-header">
+        <h3>イベント詳細</h3>
+        <button id="detail-close" class="detail-close">&times;</button>
+      </div>
+      <div class="detail-content">
+        <div id="detail-json" class="detail-json"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Live Stream Event Listener
+     */
+    class EventListener {
+      constructor() {
+        this.obsSocket = null;
+        this.events = [];
+        this.maxEvents = 100;
+        this.isPaused = false;
+        this.selectedEventId = null;
+
+        // DOM Elements
+        this.elements = {
+          statusIndicator: document.getElementById('status-indicator'),
+          statusText: document.getElementById('status-text'),
+          obsAddress: document.getElementById('obs-address'),
+          obsPassword: document.getElementById('obs-password'),
+          eventName: document.getElementById('event-name'),
+          btnConnect: document.getElementById('btn-connect'),
+          btnDisconnect: document.getElementById('btn-disconnect'),
+          filterType: document.getElementById('filter-type'),
+          filterSearch: document.getElementById('filter-search'),
+          eventCount: document.getElementById('event-count'),
+          btnClear: document.getElementById('btn-clear'),
+          btnPause: document.getElementById('btn-pause'),
+          btnExport: document.getElementById('btn-export'),
+          eventLog: document.getElementById('event-log'),
+          detailPanel: document.getElementById('detail-panel'),
+          detailJson: document.getElementById('detail-json'),
+          detailClose: document.getElementById('detail-close')
+        };
+
+        this._loadSettings();
+        this._initEventListeners();
+      }
+
+      _loadSettings() {
+        const address = localStorage.getItem('lsed_listener_address');
+        const password = localStorage.getItem('lsed_listener_password');
+        const eventName = localStorage.getItem('lsed_listener_eventName');
+
+        if (address) this.elements.obsAddress.value = address;
+        if (password) this.elements.obsPassword.value = password;
+        if (eventName) this.elements.eventName.value = eventName;
+      }
+
+      _saveSettings() {
+        localStorage.setItem('lsed_listener_address', this.elements.obsAddress.value);
+        localStorage.setItem('lsed_listener_password', this.elements.obsPassword.value);
+        localStorage.setItem('lsed_listener_eventName', this.elements.eventName.value);
+      }
+
+      _initEventListeners() {
+        this.elements.btnConnect.addEventListener('click', () => this.connect());
+        this.elements.btnDisconnect.addEventListener('click', () => this.disconnect());
+        this.elements.btnClear.addEventListener('click', () => this.clearEvents());
+        this.elements.btnPause.addEventListener('click', () => this.togglePause());
+        this.elements.btnExport.addEventListener('click', () => this.exportEvents());
+        this.elements.detailClose.addEventListener('click', () => this.closeDetail());
+
+        this.elements.filterType.addEventListener('change', () => this.applyFilter());
+        this.elements.filterSearch.addEventListener('input', () => this.applyFilter());
+
+        this.elements.eventLog.addEventListener('click', (e) => {
+          const item = e.target.closest('.event-item');
+          if (item) {
+            this.selectEvent(item.dataset.id);
+          }
+        });
+      }
+
+      _setStatus(status, text) {
+        this.elements.statusIndicator.className = 'status-indicator ' + status;
+        this.elements.statusText.textContent = text;
+
+        const isConnected = status === 'connected';
+        const isConnecting = status === 'connecting';
+        this.elements.btnConnect.disabled = isConnected || isConnecting;
+        this.elements.btnDisconnect.disabled = !isConnected;
+      }
+
+      async connect() {
+        this._saveSettings();
+
+        const address = this.elements.obsAddress.value.trim();
+        const password = this.elements.obsPassword.value;
+
+        this._setStatus('connecting', '接続中...');
+
+        try {
+          this.obsSocket = new WebSocket(address);
+
+          this.obsSocket.onopen = () => {
+            console.log('[WS] Connected');
+          };
+
+          this.obsSocket.onmessage = async (event) => {
+            const msg = JSON.parse(event.data);
+            await this._handleOBSMessage(msg, password);
+          };
+
+          this.obsSocket.onclose = () => {
+            console.log('[WS] Disconnected');
+            this._setStatus('', '切断');
+            this.obsSocket = null;
+
+            // Auto reconnect after 5 seconds
+            setTimeout(() => {
+              if (!this.obsSocket) {
+                console.log('[WS] Attempting reconnect...');
+                this.connect();
+              }
+            }, 5000);
+          };
+
+          this.obsSocket.onerror = (err) => {
+            console.error('[WS] Error:', err);
+            this._setStatus('', 'エラー');
+          };
+        } catch (error) {
+          console.error('[WS] Connection error:', error);
+          this._setStatus('', 'エラー');
+        }
+      }
+
+      disconnect() {
+        if (this.obsSocket) {
+          this.obsSocket.onclose = null; // Prevent auto reconnect
+          this.obsSocket.close();
+          this.obsSocket = null;
+        }
+        this._setStatus('', '未接続');
+      }
+
+      async _handleOBSMessage(msg, password) {
+        const { op, d } = msg;
+
+        switch (op) {
+          case 0: // Hello
+            await this._identify(d, password);
+            break;
+
+          case 2: // Identified
+            console.log('[OBS] Authenticated');
+            this._setStatus('connected', '接続済み');
+            break;
+
+          case 5: // Event
+            if (d.eventType === 'CustomEvent') {
+              this._handleCustomEvent(d.eventData);
+            }
+            break;
+        }
+      }
+
+      async _identify(helloData, password) {
+        const identifyData = {
+          rpcVersion: 1,
+          eventSubscriptions: 1 // General events
+        };
+
+        if (helloData.authentication && password) {
+          identifyData.authentication = await this._generateAuth(
+            password,
+            helloData.authentication.salt,
+            helloData.authentication.challenge
+          );
+        }
+
+        this.obsSocket.send(JSON.stringify({ op: 1, d: identifyData }));
+      }
+
+      async _generateAuth(password, salt, challenge) {
+        const encoder = new TextEncoder();
+
+        const step1Data = encoder.encode(password + salt);
+        const step1Hash = await crypto.subtle.digest('SHA-256', step1Data);
+        const step1Base64 = btoa(String.fromCharCode(...new Uint8Array(step1Hash)));
+
+        const step2Data = encoder.encode(step1Base64 + challenge);
+        const step2Hash = await crypto.subtle.digest('SHA-256', step2Data);
+        return btoa(String.fromCharCode(...new Uint8Array(step2Hash)));
+      }
+
+      _handleCustomEvent(eventData) {
+        const targetEventName = this.elements.eventName.value.trim();
+
+        // Check if this is the event we're listening for
+        if (eventData.eventName !== targetEventName) {
+          return;
+        }
+
+        const event = {
+          id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+          receivedAt: new Date(),
+          data: eventData.eventData
+        };
+
+        this.events.unshift(event);
+
+        // Limit max events
+        if (this.events.length > this.maxEvents) {
+          this.events.pop();
+        }
+
+        this._updateEventCount();
+
+        if (!this.isPaused) {
+          this._renderEvent(event, true);
+          this._cleanupOldEventElements();
+        }
+      }
+
+      _renderEvent(event, prepend = false) {
+        const data = event.data;
+        const type = data.type || 'Unknown';
+        const time = event.receivedAt.toLocaleTimeString('ja-JP', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          fractionalSecondDigits: 3
+        });
+
+        const summary = this._generateSummary(data);
+
+        const item = document.createElement('div');
+        item.className = 'event-item';
+        item.dataset.id = event.id;
+        item.dataset.type = type;
+        item.innerHTML = `
+          <div class="event-header">
+            <span class="event-time">${time}</span>
+            <span class="event-type" data-type="${type}">${type}</span>
+          </div>
+          <div class="event-summary">${summary}</div>
+        `;
+
+        // Remove empty state
+        const emptyState = this.elements.eventLog.querySelector('.empty-state');
+        if (emptyState) {
+          emptyState.remove();
+        }
+
+        if (prepend) {
+          this.elements.eventLog.prepend(item);
+        } else {
+          this.elements.eventLog.appendChild(item);
+        }
+
+        // Apply current filter
+        this._applyFilterToItem(item);
+      }
+
+      _generateSummary(data) {
+        const user = data.user?.displayName || '';
+        const payload = data.payload || {};
+        const type = data.type || '';
+
+        switch (type) {
+          case 'FirstComment':
+          case 'Comment':
+          case 'OwnerComment':
+          case 'ModeratorComment':
+          case 'MemberComment':
+            return `<span class="user">${this._escapeHtml(user)}</span>: ${this._escapeHtml(payload.message || '')}`;
+
+          case 'SuperChat':
+            return `<span class="user">${this._escapeHtml(user)}</span> <span class="amount">${payload.amountDisplayString || '¥' + payload.amount}</span> "${this._escapeHtml(payload.message || '')}"`;
+
+          case 'Membership':
+            return `<span class="user">${this._escapeHtml(user)}</span> が新規メンバーになりました`;
+
+          case 'MembershipGift':
+            return `<span class="user">${this._escapeHtml(user)}</span> が ${payload.count || 1} 個のギフトを送信`;
+
+          case 'MemberMilestone':
+            return `<span class="user">${this._escapeHtml(user)}</span> メンバー ${payload.memberMonth || '?'} ヶ月`;
+
+          case 'SessionStats':
+            return `スパチャ累計: ¥${payload.superChatTotal || 0} | ギフト: ${payload.giftTotal || 0} | ユーザー: ${payload.uniqueUsers || 0} | メッセージ: ${payload.totalMessages || 0}`;
+
+          case 'Custom':
+            return `[${payload.eventType || 'custom'}] ${this._escapeHtml(payload.message || '')}`;
+
+          default:
+            return JSON.stringify(payload).substring(0, 100);
+        }
+      }
+
+      _escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      _updateEventCount() {
+        this.elements.eventCount.textContent = `受信: ${this.events.length}件`;
+      }
+
+      _cleanupOldEventElements() {
+        const items = this.elements.eventLog.querySelectorAll('.event-item');
+        if (items.length > this.maxEvents) {
+          for (let i = this.maxEvents; i < items.length; i++) {
+            items[i].remove();
+          }
+        }
+      }
+
+      applyFilter() {
+        const items = this.elements.eventLog.querySelectorAll('.event-item');
+        items.forEach(item => this._applyFilterToItem(item));
+      }
+
+      _applyFilterToItem(item) {
+        const typeFilter = this.elements.filterType.value;
+        const searchFilter = this.elements.filterSearch.value.toLowerCase();
+        const itemType = item.dataset.type;
+
+        let visible = true;
+
+        // Type filter
+        if (typeFilter !== 'all' && itemType !== typeFilter) {
+          visible = false;
+        }
+
+        // Search filter
+        if (visible && searchFilter) {
+          const event = this.events.find(e => e.id === item.dataset.id);
+          if (event) {
+            const jsonStr = JSON.stringify(event.data).toLowerCase();
+            if (!jsonStr.includes(searchFilter)) {
+              visible = false;
+            }
+          }
+        }
+
+        item.classList.toggle('hidden', !visible);
+      }
+
+      selectEvent(eventId) {
+        // Deselect previous
+        const prevSelected = this.elements.eventLog.querySelector('.event-item.selected');
+        if (prevSelected) {
+          prevSelected.classList.remove('selected');
+        }
+
+        // Select new
+        const item = this.elements.eventLog.querySelector(`.event-item[data-id="${eventId}"]`);
+        if (item) {
+          item.classList.add('selected');
+        }
+
+        this.selectedEventId = eventId;
+
+        // Show detail panel
+        const event = this.events.find(e => e.id === eventId);
+        if (event) {
+          this.elements.detailJson.innerHTML = this._syntaxHighlight(JSON.stringify(event.data, null, 2));
+          this.elements.detailPanel.classList.remove('hidden');
+        }
+      }
+
+      _syntaxHighlight(json) {
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+          let cls = 'number';
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = 'key';
+            } else {
+              cls = 'string';
+            }
+          } else if (/true|false/.test(match)) {
+            cls = 'boolean';
+          } else if (/null/.test(match)) {
+            cls = 'null';
+          }
+          return '<span class="' + cls + '">' + match + '</span>';
+        });
+      }
+
+      closeDetail() {
+        this.elements.detailPanel.classList.add('hidden');
+        this.selectedEventId = null;
+
+        const selected = this.elements.eventLog.querySelector('.event-item.selected');
+        if (selected) {
+          selected.classList.remove('selected');
+        }
+      }
+
+      clearEvents() {
+        this.events = [];
+        this.elements.eventLog.innerHTML = '<div class="empty-state">イベント待機中...</div>';
+        this._updateEventCount();
+        this.closeDetail();
+      }
+
+      togglePause() {
+        this.isPaused = !this.isPaused;
+        this.elements.btnPause.textContent = this.isPaused ? '再開' : '一時停止';
+        this.elements.btnPause.classList.toggle('paused', this.isPaused);
+
+        if (!this.isPaused) {
+          // Re-render all events
+          this.elements.eventLog.innerHTML = '';
+          this.events.forEach(event => this._renderEvent(event, false));
+          if (this.events.length === 0) {
+            this.elements.eventLog.innerHTML = '<div class="empty-state">イベント待機中...</div>';
+          }
+        }
+      }
+
+      exportEvents() {
+        const exportData = {
+          exportedAt: new Date().toISOString(),
+          eventName: this.elements.eventName.value,
+          eventCount: this.events.length,
+          events: this.events.map(e => ({
+            receivedAt: e.receivedAt.toISOString(),
+            data: e.data
+          }))
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `events_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      window.eventListener = new EventListener();
+    });
+  </script>
+</body>
+</html>
