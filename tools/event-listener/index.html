@@ -792,7 +792,7 @@
             return `<span class="user">${this._escapeHtml(user)}</span> メンバー ${payload.memberMonth || '?'} ヶ月`;
 
           case 'SessionStats':
-            return `スパチャ累計: ¥${payload.superChatTotal || 0} | ギフト: ${payload.giftTotal || 0} | ユーザー: ${payload.uniqueUsers || 0} | メッセージ: ${payload.totalMessages || 0}`;
+            return `スパチャ累計: ¥${payload.superChatTotal || 0} | ギフト: ${payload.giftTotal || 0} | 新規メンバー: ${payload.newMemberTotal || 0} | ユーザー: ${payload.uniqueUsers || 0} | メッセージ: ${payload.totalMessages || 0}`;
 
           case 'Custom':
             return `[${payload.eventType || 'custom'}] ${this._escapeHtml(payload.message || '')}`;

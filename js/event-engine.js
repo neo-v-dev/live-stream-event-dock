@@ -172,6 +172,9 @@ class EventEngine {
       case 'membership':
         return this._checkMembership(condition, message);
 
+      case 'membershipCount':
+        return this._checkMembershipCount(condition, message);
+
       default:
         console.log(`[Event] 不明な条件タイプ: ${condition.type}`);
         return false;
@@ -240,105 +243,93 @@ class EventEngine {
   }
 
   /**
-   * メンバーシップチェック（ギフト累計閾値）
+   * ギフト数チェック（全体ギフト累計閾値）
    */
   _checkMembership(condition, message) {
-    // ギフトまたは新規加入でなければスキップ
-    const isGift = !!message.membershipGift;
-    const isNewMember = !!message.newSponsor;
-
-    if (!isGift && !isNewMember) return false;
-
-    // 新規加入を含めない場合、ギフトのみ対象
-    const includeNewMember = condition.includeNewMember || false;
-    if (isNewMember && !includeNewMember) return false;
+    // ギフトでなければスキップ
+    if (!message.membershipGift) return false;
 
     if (!this.streamEventSender?.sessionManager) return false;
 
-    const channelId = message.authorChannelId;
-    if (!channelId) return false;
-
-    const user = this.streamEventSender.sessionManager.getUser(channelId);
-    if (!user) return false;
-
+    const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.giftThreshold || 10;
 
-    // 今回の増分を計算
-    let currentCount = user.giftCount;
-    if (isNewMember && includeNewMember) {
-      // 新規加入は1カウント（giftCountには含まれていないので仮想的に加算）
-      // 注: session-managerではnewSponsorはgiftCountに加算されない
-      currentCount += 1;
+    // ちょうど閾値に達した時のみトリガー
+    return stats.totalGifts === threshold;
+  }
+
+  /**
+   * メンバー加入数チェック（全体の新規メンバー数が閾値に達した時）
+   * デフォルトはギフトを含まない（新規加入のみ）
+   */
+  _checkMembershipCount(condition, message) {
+    // ギフトを含める場合
+    const includeGifts = condition.includeGifts || false;
+
+    // 対象イベントのチェック
+    if (includeGifts) {
+      // ギフトまたは新規加入でなければスキップ
+      if (!message.membershipGift && !message.newSponsor) return false;
+    } else {
+      // 新規加入でなければスキップ
+      if (!message.newSponsor) return false;
     }
 
-    // ギフトの場合、既にgiftCountは更新済み（processMessage後）
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.memberCountThreshold || 10;
+
+    // ギフトを含める場合は totalMembersWithGifts、そうでなければ totalNewMembers
+    const currentCount = includeGifts ? stats.totalMembersWithGifts : stats.totalNewMembers;
+
     // ちょうど閾値に達した時のみトリガー
     return currentCount === threshold;
   }
 
   /**
-   * コメント数チェック（閾値達成時）
+   * コメント数チェック（全体の累計コメント数が閾値に達した時）
    */
   _checkCommentCount(condition, message) {
-    if (!this.streamEventSender?.sessionManager) return false;
+    if (!this.streamEventSender?.sessionManager) {
+      return false;
+    }
 
-    const channelId = message.authorChannelId;
-    if (!channelId) return false;
-
-    const user = this.streamEventSender.sessionManager.getUser(channelId);
-    if (!user) return false;
-
+    const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.threshold || 10;
 
     // ちょうど閾値に達した時のみトリガー
-    return user.messageCount === threshold;
+    return stats.totalMessages === threshold;
   }
 
   /**
-   * スーパーチャット回数チェック（閾値達成時）
+   * スーパーチャット回数チェック（全体の累計回数が閾値に達した時）
    */
   _checkSuperchatCount(condition, message) {
     if (!message.superchat) return false;
     if (!this.streamEventSender?.sessionManager) return false;
 
-    const channelId = message.authorChannelId;
-    if (!channelId) return false;
-
-    // 最低金額チェック
-    if (condition.minAmount && condition.minAmount > 0) {
-      const amountYen = parseInt(message.superchat.amountMicros) / 1000000;
-      if (amountYen < condition.minAmount) {
-        return false;
-      }
-    }
-
-    const user = this.streamEventSender.sessionManager.getUser(channelId);
-    if (!user) return false;
-
+    const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.countThreshold || 3;
 
     // ちょうど閾値に達した時のみトリガー
-    return user.superChatCount === threshold;
+    return stats.totalSuperChatCount === threshold;
   }
 
   /**
-   * スーパーチャット累計金額チェック（閾値達成時）
+   * スーパーチャット累計金額チェック（全体の累計金額が閾値に達した時）
    */
   _checkSuperchatTotal(condition, message) {
     if (!message.superchat) return false;
     if (!this.streamEventSender?.sessionManager) return false;
 
-    const channelId = message.authorChannelId;
-    if (!channelId) return false;
-
-    const user = this.streamEventSender.sessionManager.getUser(channelId);
-    if (!user) return false;
-
+    const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.totalThreshold || 10000;
-    const previousTotal = user.superChatTotal - this._parseSuperchatAmount(message.superchat);
+    const currentAmount = this._parseSuperchatAmount(message.superchat);
+    const previousTotal = stats.totalSuperChat - currentAmount;
 
     // 今回のスパチャで閾値を超えた場合のみトリガー（以前は未達だった）
-    return previousTotal < threshold && user.superChatTotal >= threshold;
+    return previousTotal < threshold && stats.totalSuperChat >= threshold;
   }
 
   /**
@@ -397,7 +388,8 @@ class EventEngine {
         countThreshold: 3,
         totalThreshold: 10000,
         giftThreshold: 10,
-        includeNewMember: false
+        memberCountThreshold: 10,
+        includeGifts: false
       },
       customEventType: '',
       customData: '',

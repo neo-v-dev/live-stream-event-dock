@@ -78,6 +78,7 @@ class StreamEventSender {
     return this.sendEvent('SessionStats', {
       superChatTotal: stats.totalSuperChat,
       giftTotal: stats.totalGifts,
+      newMemberTotal: stats.totalNewMembers,
       uniqueUsers: stats.uniqueUsers,
       totalMessages: stats.totalMessages
     });

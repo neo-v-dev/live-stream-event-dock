@@ -12,6 +12,9 @@ class SessionManager {
     // セッション開始時刻
     this.startedAt = new Date().toISOString();
 
+    // セッションレベルのカウンター（新規メンバー数）
+    this.newMemberCount = 0;
+
     // 設定
     this.config = {
       maxUsers: 1000  // メモリリーク防止
@@ -67,6 +70,7 @@ class SessionManager {
     this.sessionId = this._generateSessionId();
     this.users.clear();
     this.startedAt = new Date().toISOString();
+    this.newMemberCount = 0;
     console.log('[Session] 新しいセッション開始:', this.sessionId);
   }
 
@@ -187,14 +191,18 @@ class SessionManager {
     }
 
     // 新規メンバーシップ処理
-    if (message.newSponsor && this.eventSettings.membership?.enabled) {
-      events.push({
-        type: 'Membership',
-        payload: {
-          type: 'new',
-          levelName: message.memberLevelName || ''
-        }
-      });
+    if (message.newSponsor) {
+      this.newMemberCount++;
+
+      if (this.eventSettings.membership?.enabled) {
+        events.push({
+          type: 'Membership',
+          payload: {
+            type: 'new',
+            levelName: message.memberLevelName || ''
+          }
+        });
+      }
     }
 
     // メンバーマイルストーン（マイルストーンチャット）処理
@@ -298,11 +306,13 @@ class SessionManager {
   getStats() {
     let totalMessages = 0;
     let totalSuperChat = 0;
+    let totalSuperChatCount = 0;
     let totalGifts = 0;
 
     for (const user of this.users.values()) {
       totalMessages += user.messageCount;
       totalSuperChat += user.superChatTotal;
+      totalSuperChatCount += user.superChatCount;
       totalGifts += user.giftCount;
     }
 
@@ -312,7 +322,10 @@ class SessionManager {
       uniqueUsers: this.users.size,
       totalMessages,
       totalSuperChat,
-      totalGifts
+      totalSuperChatCount,
+      totalGifts,
+      totalNewMembers: this.newMemberCount,
+      totalMembersWithGifts: this.newMemberCount + totalGifts
     };
   }
 }

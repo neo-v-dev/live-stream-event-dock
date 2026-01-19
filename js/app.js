@@ -72,8 +72,10 @@ class App {
       conditionTotalThresholdGroup: document.getElementById('condition-total-threshold-group'),
       conditionGiftThreshold: document.getElementById('condition-gift-threshold'),
       conditionGiftThresholdGroup: document.getElementById('condition-gift-threshold-group'),
-      conditionIncludeNewMember: document.getElementById('condition-include-new-member'),
-      conditionIncludeNewMemberGroup: document.getElementById('condition-include-new-member-group'),
+      conditionMemberCountThreshold: document.getElementById('condition-member-count-threshold'),
+      conditionMemberCountThresholdGroup: document.getElementById('condition-member-count-threshold-group'),
+      conditionIncludeGifts: document.getElementById('condition-include-gifts'),
+      conditionIncludeGiftsGroup: document.getElementById('condition-include-gifts-group'),
       customEventType: document.getElementById('custom-event-type'),
       customData: document.getElementById('custom-data'),
       ruleCooldown: document.getElementById('rule-cooldown'),
@@ -460,7 +462,8 @@ class App {
     this.elements.conditionCountThreshold.value = condition.countThreshold || 3;
     this.elements.conditionTotalThreshold.value = condition.totalThreshold || 10000;
     this.elements.conditionGiftThreshold.value = condition.giftThreshold || 10;
-    this.elements.conditionIncludeNewMember.checked = condition.includeNewMember || false;
+    this.elements.conditionMemberCountThreshold.value = condition.memberCountThreshold || 10;
+    this.elements.conditionIncludeGifts.checked = condition.includeGifts || false;
 
     // カスタムイベント
     this.elements.customEventType.value = rule.customEventType || '';
@@ -490,8 +493,9 @@ class App {
     const showSuperchatMode = type === 'superchat';
     this.elements.superchatModeGroup.style.display = showSuperchatMode ? 'block' : 'none';
 
-    // 金額入力の表示/非表示（superchat時、everyTimeまたはcount）
-    const showAmount = type === 'superchat' && ['everyTime', 'count'].includes(superchatMode);
+    // 金額入力の表示/非表示（superchat時、everyTimeのみ）
+    // 回数・累計金額は全体累計なので最低金額フィルタは不要
+    const showAmount = type === 'superchat' && superchatMode === 'everyTime';
     this.elements.conditionAmountGroup.style.display = showAmount ? 'block' : 'none';
 
     // 閾値入力の表示/非表示（commentCount時のみ）
@@ -509,7 +513,11 @@ class App {
     // ギフト閾値の表示/非表示（membership時のみ）
     const showGiftThreshold = type === 'membership';
     this.elements.conditionGiftThresholdGroup.style.display = showGiftThreshold ? 'block' : 'none';
-    this.elements.conditionIncludeNewMemberGroup.style.display = showGiftThreshold ? 'block' : 'none';
+
+    // メンバー加入数閾値の表示/非表示（membershipCount時のみ）
+    const showMemberCountThreshold = type === 'membershipCount';
+    this.elements.conditionMemberCountThresholdGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
+    this.elements.conditionIncludeGiftsGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
 
     // プレースホルダー更新
     const placeholders = {
@@ -564,7 +572,8 @@ class App {
         countThreshold: parseInt(this.elements.conditionCountThreshold.value) || 3,
         totalThreshold: parseInt(this.elements.conditionTotalThreshold.value) || 10000,
         giftThreshold: parseInt(this.elements.conditionGiftThreshold.value) || 1,
-        includeNewMember: this.elements.conditionIncludeNewMember.checked
+        memberCountThreshold: parseInt(this.elements.conditionMemberCountThreshold.value) || 10,
+        includeGifts: this.elements.conditionIncludeGifts.checked
       },
       customEventType: this.elements.customEventType.value.trim(),
       customData: this.elements.customData.value.trim(),

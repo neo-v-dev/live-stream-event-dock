@@ -231,15 +231,16 @@
                 <option value="match">テキスト一致</option>
                 <option value="command">コマンド (!xxx)</option>
                 <option value="superchat">スーパーチャット</option>
-                <option value="commentCount">コメント数</option>
-                <option value="membership">メンバーシップ</option>
+                <option value="commentCount">コメント数（全体累計）</option>
+                <option value="membership">ギフト数（全体累計）</option>
+                <option value="membershipCount">メンバー加入数（全体累計）</option>
               </select>
             </div>
             <div class="form-group" id="superchat-mode-group" style="display:none;">
               <div class="sub-tabs">
                 <button type="button" class="sub-tab active" data-mode="everyTime">毎回</button>
-                <button type="button" class="sub-tab" data-mode="count">回数</button>
-                <button type="button" class="sub-tab" data-mode="total">累計金額</button>
+                <button type="button" class="sub-tab" data-mode="count">回数（全体）</button>
+                <button type="button" class="sub-tab" data-mode="total">累計金額（全体）</button>
               </div>
               <input type="hidden" id="superchat-mode" value="everyTime">
             </div>
@@ -261,7 +262,7 @@
               <input type="number" id="condition-amount" value="0" min="0">
             </div>
             <div class="form-group" id="condition-threshold-group" style="display:none;">
-              <label for="condition-threshold">閾値 (回)</label>
+              <label for="condition-threshold">コメント数閾値</label>
               <input type="number" id="condition-threshold" value="10" min="1">
             </div>
             <div class="form-group" id="condition-count-threshold-group" style="display:none;">
@@ -276,10 +277,14 @@
               <label for="condition-gift-threshold">ギフト累計閾値 (個)</label>
               <input type="number" id="condition-gift-threshold" value="10" min="1">
             </div>
-            <div class="form-group" id="condition-include-new-member-group" style="display:none;">
-              <label for="condition-include-new-member">
-                <input type="checkbox" id="condition-include-new-member">
-                新規加入を含める
+            <div class="form-group" id="condition-member-count-threshold-group" style="display:none;">
+              <label for="condition-member-count-threshold">メンバー加入数閾値 (人)</label>
+              <input type="number" id="condition-member-count-threshold" value="10" min="1">
+            </div>
+            <div class="form-group" id="condition-include-gifts-group" style="display:none;">
+              <label for="condition-include-gifts">
+                <input type="checkbox" id="condition-include-gifts">
+                ギフトを含める
               </label>
             </div>
           </fieldset>
