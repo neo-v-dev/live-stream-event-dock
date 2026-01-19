@@ -38,7 +38,12 @@
 | パラメータ | 型 | 説明 |
 |-----------|-----|------|
 | `matchType` | string | 一致タイプ |
-| `value` | string | 検索テキスト |
+| `patterns` | string[] | 検索テキストの配列（複数指定可） |
+| `logic` | string | 複数パターン時の組み合わせ（`or` または `and`） |
+| `ignoreCase` | boolean | 大文字・小文字を区別しない |
+| `normalizeWidth` | boolean | 半角・全角を区別しない |
+
+> **後方互換性**: `value` パラメータも引き続きサポートされます（単一パターンとして扱われます）
 
 ### 一致タイプ
 
@@ -49,29 +54,78 @@
 | `endsWith` | 後方一致 | "say hello" → ✅ |
 | `exact` | 完全一致 | "hello" → ✅ |
 
+### テキストオプション
+
+| オプション | 説明 | 例 |
+|-----------|------|-----|
+| `ignoreCase` | 大文字・小文字を同一視 | "Hello" = "hello" = "HELLO" |
+| `normalizeWidth` | 半角・全角を同一視 | "ｈｅｌｌｏ" = "hello"、"Ａ" = "A" |
+
+### 複数パターン
+
+1つのルールに複数の検索パターンを設定できます。
+
+| ロジック | 説明 | 例 |
+|---------|------|-----|
+| `or` | いずれかにマッチ | "おめでとう" OR "おめ" → どちらかにマッチで発火 |
+| `and` | すべてにマッチ | "配信" AND "ありがとう" → 両方含む場合のみ発火 |
+
 ### 設定例
 
 ```javascript
+// 単一パターン（従来形式）
 {
   type: "match",
   matchType: "contains",
-  value: "おめでとう"
+  patterns: ["おめでとう"]
+}
+
+// 複数パターン（OR）
+{
+  type: "match",
+  matchType: "contains",
+  patterns: ["おめでとう", "おめ", "congrats"],
+  logic: "or",
+  ignoreCase: true
+}
+
+// 複数パターン（AND）
+{
+  type: "match",
+  matchType: "contains",
+  patterns: ["配信", "ありがとう"],
+  logic: "and"
+}
+
+// 半角全角を区別しない
+{
+  type: "match",
+  matchType: "contains",
+  patterns: ["hello"],
+  normalizeWidth: true  // "ｈｅｌｌｏ"にもマッチ
 }
 ```
 
 ### 判定ロジック
 
 ```javascript
-// 大文字・小文字を区別する
-switch (matchType) {
-  case 'contains':
-    return text.includes(value);
-  case 'startsWith':
-    return text.startsWith(value);
-  case 'endsWith':
-    return text.endsWith(value);
-  case 'exact':
-    return text === value;
+_checkMatch(condition, message) {
+  const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+  const options = {
+    ignoreCase: condition.ignoreCase || false,
+    normalizeWidth: condition.normalizeWidth || false
+  };
+
+  const text = this._normalizeText(message.message || '', options);
+  const logic = condition.logic || 'or';
+
+  const results = patterns.map(pattern => {
+    const normalizedPattern = this._normalizeText(pattern, options);
+    return this._testSinglePattern(text, normalizedPattern, matchType);
+  });
+
+  // AND: すべてマッチ、OR: いずれかマッチ
+  return logic === 'and' ? results.every(r => r) : results.some(r => r);
 }
 ```
 
@@ -85,7 +139,12 @@ switch (matchType) {
 
 | パラメータ | 型 | 説明 |
 |-----------|-----|------|
-| `value` | string | コマンド名（`!`は省略可） |
+| `patterns` | string[] | コマンド名の配列（`!`は省略可、複数指定可） |
+| `logic` | string | 複数パターン時の組み合わせ（`or` または `and`） |
+| `ignoreCase` | boolean | 大文字・小文字を区別しない |
+| `normalizeWidth` | boolean | 半角・全角を区別しない |
+
+> **後方互換性**: `value` パラメータも引き続きサポートされます
 
 ### 判定ルール
 
@@ -98,14 +157,30 @@ switch (matchType) {
 | `!hello　world` | ✅ マッチ | 全角スペースも対応 |
 | `!helloworld` | ❌ 不一致 | スペース区切りなし |
 | `say !hello` | ❌ 不一致 | 行頭ではない |
-| `!HELLO` | ❌ 不一致 | 大文字・小文字を区別 |
+| `!HELLO` | ✅/❌ | `ignoreCase: true` なら ✅ |
 
 ### 設定例
 
 ```javascript
+// 単一コマンド
 {
   type: "command",
-  value: "dice"  // または "!dice"
+  patterns: ["dice"]  // または "!dice"
+}
+
+// 複数コマンド（エイリアス）
+{
+  type: "command",
+  patterns: ["dice", "roll", "サイコロ"],
+  logic: "or",
+  ignoreCase: true
+}
+
+// 半角全角を区別しない
+{
+  type: "command",
+  patterns: ["dice"],
+  normalizeWidth: true  // "！ｄｉｃｅ"にもマッチ
 }
 ```
 
@@ -113,16 +188,22 @@ switch (matchType) {
 
 ```javascript
 _checkCommand(condition, message) {
-  const text = (message.message || '').trim();
-  let command = condition.value;
+  const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+  const options = {
+    ignoreCase: condition.ignoreCase || false,
+    normalizeWidth: condition.normalizeWidth || false
+  };
 
-  // !で始まっていなければ追加
-  if (!command.startsWith('!')) {
-    command = '!' + command;
-  }
+  const text = this._normalizeText((message.message || '').trim(), options);
+  const logic = condition.logic || 'or';
 
-  // コマンドは行頭でマッチ（完全一致またはスペース区切り）
-  return text === command || text.startsWith(command + ' ');
+  const results = patterns.map(pattern => {
+    let command = this._normalizeText(pattern, options);
+    if (!command.startsWith('!')) command = '!' + command;
+    return text === command || text.startsWith(command + ' ');
+  });
+
+  return logic === 'and' ? results.every(r => r) : results.some(r => r);
 }
 ```
 
@@ -194,6 +275,33 @@ _checkCommand(condition, message) {
 ```
 
 > **注意**: 閾値を「超えた瞬間」に発火します（例: 累計が9500円→10500円になった時に発火）。
+
+### テキスト判定オプション
+
+スーパーチャット条件（毎回/回数/累計金額）にテキスト判定を追加できます。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `textMatch` | boolean | テキスト判定を有効にする |
+| `textMatchType` | string | 一致タイプ（contains, startsWith, endsWith, exact） |
+| `textMatchPatterns` | string[] | 検索テキストの配列（複数指定可） |
+| `textMatchLogic` | string | 複数パターン時の組み合わせ（`or` または `and`） |
+| `textMatchIgnoreCase` | boolean | 大文字・小文字を区別しない |
+| `textMatchNormalizeWidth` | boolean | 半角・全角を区別しない |
+
+```javascript
+// スパチャ500円以上で「応援」を含む
+{
+  type: "superchat",
+  mode: "everyTime",
+  minAmount: 500,
+  textMatch: true,
+  textMatchType: "contains",
+  textMatchPatterns: ["応援", "頑張れ", "ファイト"],
+  textMatchLogic: "or",
+  textMatchIgnoreCase: true
+}
+```
 
 ---
 
@@ -577,10 +685,63 @@ _checkLikeCount(condition, stats) {
   condition: {
     type: "match",
     matchType: "contains",
-    value: "かわいい"
+    patterns: ["かわいい"]
   },
   eventType: "CuteEffect",
   cooldown: 5
+}
+```
+
+### 5. 複数キーワード対応（エイリアス）
+
+```javascript
+// 「おめでとう」系のバリエーションに対応
+{
+  name: "おめでとうエフェクト",
+  condition: {
+    type: "match",
+    matchType: "contains",
+    patterns: ["おめでとう", "おめ", "congrats", "congratulations"],
+    logic: "or",
+    ignoreCase: true
+  },
+  eventType: "Congratulation",
+  cooldown: 5
+}
+```
+
+### 6. 複合条件（AND）
+
+```javascript
+// 「配信」と「ありがとう」の両方を含む
+{
+  name: "配信感謝エフェクト",
+  condition: {
+    type: "match",
+    matchType: "contains",
+    patterns: ["配信", "ありがとう"],
+    logic: "and"
+  },
+  eventType: "ThankYouStream",
+  cooldown: 10
+}
+```
+
+### 7. 半角全角対応コマンド
+
+```javascript
+// 全角入力にも対応
+{
+  name: "サイコロ（全角対応）",
+  condition: {
+    type: "command",
+    patterns: ["dice", "サイコロ"],
+    logic: "or",
+    normalizeWidth: true,  // "！ｄｉｃｅ"にも対応
+    ignoreCase: true       // "!DICE"にも対応
+  },
+  eventType: "DiceRoll",
+  cooldown: 10
 }
 ```
 
@@ -594,9 +755,10 @@ _checkLikeCount(condition, stats) {
    - ルール一覧で「有効」チェックボックスがオンになっているか
 
 2. **条件が正しいか確認**
-   - テキスト一致: 大文字・小文字を区別します
+   - テキスト一致: デフォルトで大文字・小文字を区別します（「大文字・小文字を区別しない」オプションあり）
    - コマンド: 行頭完全一致です
-   - 閾値系: 「達した瞬間」のみ発火します
+   - 閾値系: 閾値以上で発火します
+   - 半角・全角の違いに注意（「半角・全角を区別しない」オプションあり）
 
 3. **クールダウン中ではないか確認**
    - `onceOnly` が有効で既に発火済みではないか

@@ -262,12 +262,77 @@
               </select>
             </div>
             <div class="form-group" id="condition-value-group">
-              <label for="condition-value">値</label>
-              <input type="text" id="condition-value" placeholder="検索テキスト">
+              <label>検索テキスト</label>
+              <div id="condition-patterns-list" class="patterns-list">
+                <div class="pattern-item">
+                  <input type="text" class="pattern-input" placeholder="検索テキスト">
+                  <button type="button" class="btn btn-small btn-danger pattern-remove" style="display:none;">−</button>
+                </div>
+              </div>
+              <button type="button" id="add-pattern" class="btn btn-small btn-secondary">+ 条件追加</button>
+            </div>
+            <div class="form-group" id="condition-logic-group" style="display:none;">
+              <label>複数条件の組み合わせ</label>
+              <div class="logic-selector">
+                <label><input type="radio" name="condition-logic" value="or" checked> OR（いずれか一致）</label>
+                <label><input type="radio" name="condition-logic" value="and"> AND（すべて一致）</label>
+              </div>
+            </div>
+            <div class="form-group" id="condition-text-options-group">
+              <label>
+                <input type="checkbox" id="condition-ignore-case">
+                大文字・小文字を区別しない
+              </label>
+              <label>
+                <input type="checkbox" id="condition-normalize-width">
+                半角・全角を区別しない
+              </label>
             </div>
             <div class="form-group" id="condition-amount-group" style="display:none;">
               <label for="condition-amount">最低金額 (円)</label>
               <input type="number" id="condition-amount" value="0" min="0">
+            </div>
+            <div class="form-group" id="superchat-text-match-group" style="display:none;">
+              <label for="superchat-text-match">
+                <input type="checkbox" id="superchat-text-match">
+                内容を判定する
+              </label>
+            </div>
+            <div class="form-group" id="superchat-match-type-group" style="display:none;">
+              <label for="superchat-match-type">一致タイプ</label>
+              <select id="superchat-match-type">
+                <option value="contains">含有</option>
+                <option value="startsWith">前方一致</option>
+                <option value="endsWith">後方一致</option>
+                <option value="exact">完全一致</option>
+              </select>
+            </div>
+            <div class="form-group" id="superchat-match-value-group" style="display:none;">
+              <label>検索テキスト</label>
+              <div id="superchat-patterns-list" class="patterns-list">
+                <div class="pattern-item">
+                  <input type="text" class="pattern-input" placeholder="検索テキスト">
+                  <button type="button" class="btn btn-small btn-danger pattern-remove" style="display:none;">−</button>
+                </div>
+              </div>
+              <button type="button" id="add-superchat-pattern" class="btn btn-small btn-secondary">+ 条件追加</button>
+            </div>
+            <div class="form-group" id="superchat-logic-group" style="display:none;">
+              <label>複数条件の組み合わせ</label>
+              <div class="logic-selector">
+                <label><input type="radio" name="superchat-logic" value="or" checked> OR（いずれか一致）</label>
+                <label><input type="radio" name="superchat-logic" value="and"> AND（すべて一致）</label>
+              </div>
+            </div>
+            <div class="form-group" id="superchat-text-options-group" style="display:none;">
+              <label>
+                <input type="checkbox" id="superchat-ignore-case">
+                大文字・小文字を区別しない
+              </label>
+              <label>
+                <input type="checkbox" id="superchat-normalize-width">
+                半角・全角を区別しない
+              </label>
             </div>
             <div class="form-group" id="condition-threshold-group" style="display:none;">
               <label for="condition-threshold">コメント数閾値</label>

@@ -203,6 +203,51 @@ fieldset.form-group legend {
   padding: 0 6px;
 }
 
+/* パターンリスト（複数条件） */
+.patterns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.pattern-item {
+  display: flex;
+  gap: 4px;
+}
+
+.pattern-item .pattern-input {
+  flex: 1;
+}
+
+.pattern-item .pattern-remove {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.logic-selector {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.logic-selector label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+#condition-text-options-group label,
+#superchat-text-options-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
 /* ボタン */
 .btn {
   padding: 6px 12px;

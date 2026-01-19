@@ -70,10 +70,26 @@ class App {
       superchatMode: document.getElementById('superchat-mode'),
       conditionMatchType: document.getElementById('condition-match-type'),
       conditionMatchTypeGroup: document.getElementById('condition-match-type-group'),
-      conditionValue: document.getElementById('condition-value'),
       conditionValueGroup: document.getElementById('condition-value-group'),
+      conditionPatternsList: document.getElementById('condition-patterns-list'),
+      addPatternBtn: document.getElementById('add-pattern'),
+      conditionLogicGroup: document.getElementById('condition-logic-group'),
+      conditionTextOptionsGroup: document.getElementById('condition-text-options-group'),
+      conditionIgnoreCase: document.getElementById('condition-ignore-case'),
+      conditionNormalizeWidth: document.getElementById('condition-normalize-width'),
       conditionAmount: document.getElementById('condition-amount'),
       conditionAmountGroup: document.getElementById('condition-amount-group'),
+      superchatTextMatch: document.getElementById('superchat-text-match'),
+      superchatTextMatchGroup: document.getElementById('superchat-text-match-group'),
+      superchatMatchType: document.getElementById('superchat-match-type'),
+      superchatMatchTypeGroup: document.getElementById('superchat-match-type-group'),
+      superchatMatchValueGroup: document.getElementById('superchat-match-value-group'),
+      superchatPatternsList: document.getElementById('superchat-patterns-list'),
+      addSuperchatPatternBtn: document.getElementById('add-superchat-pattern'),
+      superchatLogicGroup: document.getElementById('superchat-logic-group'),
+      superchatTextOptionsGroup: document.getElementById('superchat-text-options-group'),
+      superchatIgnoreCase: document.getElementById('superchat-ignore-case'),
+      superchatNormalizeWidth: document.getElementById('superchat-normalize-width'),
       conditionThreshold: document.getElementById('condition-threshold'),
       conditionThresholdGroup: document.getElementById('condition-threshold-group'),
       conditionCountThreshold: document.getElementById('condition-count-threshold'),
@@ -150,6 +166,13 @@ class App {
 
     // 1度だけ送信チェックボックス変更時のクールダウン表示切り替え
     this.elements.ruleOnceOnly.addEventListener('change', () => this._updateCooldownUI());
+
+    // スーパーチャットテキスト判定チェックボックス変更時
+    this.elements.superchatTextMatch.addEventListener('change', () => this._updateSuperchatTextMatchUI());
+
+    // パターン追加ボタン
+    this.elements.addPatternBtn.addEventListener('click', () => this._addPattern('condition'));
+    this.elements.addSuperchatPatternBtn.addEventListener('click', () => this._addPattern('superchat'));
 
     // スーパーチャットモードタブ切り替え
     document.querySelectorAll('.sub-tab').forEach(tab => {
@@ -507,8 +530,22 @@ class App {
     this.elements.conditionType.value = conditionType;
     this._setSuperchatMode(superchatMode);
     this.elements.conditionMatchType.value = condition.matchType || 'contains';
-    this.elements.conditionValue.value = condition.value || '';
+    // パターンをセット（後方互換性のためvalueも対応）
+    const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+    this._setPatterns('condition', patterns);
+    this._setLogic('condition', condition.logic);
+    this.elements.conditionIgnoreCase.checked = condition.ignoreCase || false;
+    this.elements.conditionNormalizeWidth.checked = condition.normalizeWidth || false;
     this.elements.conditionAmount.value = condition.minAmount || 0;
+    // スーパーチャットテキスト判定
+    this.elements.superchatTextMatch.checked = condition.textMatch || false;
+    this.elements.superchatMatchType.value = condition.textMatchType || 'contains';
+    // スーパーチャットパターンをセット
+    const superchatPatterns = condition.textMatchPatterns || (condition.textMatchValue ? [condition.textMatchValue] : []);
+    this._setPatterns('superchat', superchatPatterns);
+    this._setLogic('superchat', condition.textMatchLogic);
+    this.elements.superchatIgnoreCase.checked = condition.textMatchIgnoreCase || false;
+    this.elements.superchatNormalizeWidth.checked = condition.textMatchNormalizeWidth || false;
     this.elements.conditionThreshold.value = condition.threshold || 10;
     this.elements.conditionCountThreshold.value = condition.countThreshold || 3;
     this.elements.conditionTotalThreshold.value = condition.totalThreshold || 10000;
@@ -551,6 +588,18 @@ class App {
     const showAmount = type === 'superchat' && superchatMode === 'everyTime';
     this.elements.conditionAmountGroup.style.display = showAmount ? 'block' : 'none';
 
+    // スーパーチャットテキスト判定の表示/非表示（superchat時のみ）
+    const showSuperchatTextMatch = type === 'superchat';
+    this.elements.superchatTextMatchGroup.style.display = showSuperchatTextMatch ? 'block' : 'none';
+    if (!showSuperchatTextMatch) {
+      // superchat以外の場合は関連UIを非表示
+      this.elements.superchatMatchTypeGroup.style.display = 'none';
+      this.elements.superchatMatchValueGroup.style.display = 'none';
+    } else {
+      // superchatの場合はチェックボックスの状態に応じて表示
+      this._updateSuperchatTextMatchUI();
+    }
+
     // 閾値入力の表示/非表示（commentCount時のみ）
     const showThreshold = type === 'commentCount';
     this.elements.conditionThresholdGroup.style.display = showThreshold ? 'block' : 'none';
@@ -580,12 +629,16 @@ class App {
     const showLikeThreshold = type === 'likeCount';
     this.elements.conditionLikeThresholdGroup.style.display = showLikeThreshold ? 'block' : 'none';
 
-    // プレースホルダー更新
-    const placeholders = {
-      match: '検索テキスト',
-      command: 'コマンド名'
-    };
-    this.elements.conditionValue.placeholder = placeholders[type] || '';
+    // テキストオプションの表示/非表示（match, command時のみ）
+    const showTextOptions = ['match', 'command'].includes(type);
+    this.elements.conditionTextOptionsGroup.style.display = showTextOptions ? 'block' : 'none';
+
+    // 複数パターン時のロジック選択表示更新
+    if (showValue) {
+      this._updateLogicGroupVisibility('condition');
+    } else {
+      this.elements.conditionLogicGroup.style.display = 'none';
+    }
   }
 
   /**
@@ -594,6 +647,146 @@ class App {
   _updateCooldownUI() {
     const onceOnly = this.elements.ruleOnceOnly.checked;
     this.elements.ruleCooldownGroup.style.display = onceOnly ? 'none' : 'block';
+  }
+
+  /**
+   * スーパーチャットテキスト判定UI更新
+   */
+  _updateSuperchatTextMatchUI() {
+    const enabled = this.elements.superchatTextMatch.checked;
+    this.elements.superchatMatchTypeGroup.style.display = enabled ? 'block' : 'none';
+    this.elements.superchatMatchValueGroup.style.display = enabled ? 'block' : 'none';
+    this.elements.superchatTextOptionsGroup.style.display = enabled ? 'block' : 'none';
+    // 複数パターンの場合のみロジック選択を表示
+    this._updateLogicGroupVisibility('superchat');
+  }
+
+  /**
+   * パターンを追加
+   */
+  _addPattern(type) {
+    const list = type === 'superchat'
+      ? this.elements.superchatPatternsList
+      : this.elements.conditionPatternsList;
+
+    const item = document.createElement('div');
+    item.className = 'pattern-item';
+    item.innerHTML = `
+      <input type="text" class="pattern-input" placeholder="検索テキスト">
+      <button type="button" class="btn btn-small btn-danger pattern-remove">−</button>
+    `;
+
+    // 削除ボタンのイベント
+    item.querySelector('.pattern-remove').addEventListener('click', () => {
+      item.remove();
+      this._updatePatternRemoveButtons(type);
+      this._updateLogicGroupVisibility(type);
+    });
+
+    list.appendChild(item);
+    this._updatePatternRemoveButtons(type);
+    this._updateLogicGroupVisibility(type);
+  }
+
+  /**
+   * パターン削除ボタンの表示/非表示を更新
+   */
+  _updatePatternRemoveButtons(type) {
+    const list = type === 'superchat'
+      ? this.elements.superchatPatternsList
+      : this.elements.conditionPatternsList;
+
+    const items = list.querySelectorAll('.pattern-item');
+    items.forEach((item, index) => {
+      const removeBtn = item.querySelector('.pattern-remove');
+      // 2つ以上ある場合のみ削除ボタンを表示
+      removeBtn.style.display = items.length > 1 ? 'block' : 'none';
+    });
+  }
+
+  /**
+   * ロジック選択グループの表示/非表示を更新
+   */
+  _updateLogicGroupVisibility(type) {
+    const list = type === 'superchat'
+      ? this.elements.superchatPatternsList
+      : this.elements.conditionPatternsList;
+    const logicGroup = type === 'superchat'
+      ? this.elements.superchatLogicGroup
+      : this.elements.conditionLogicGroup;
+
+    const patternCount = list.querySelectorAll('.pattern-item').length;
+    logicGroup.style.display = patternCount > 1 ? 'block' : 'none';
+  }
+
+  /**
+   * パターンリストを取得
+   */
+  _getPatterns(type) {
+    const list = type === 'superchat'
+      ? this.elements.superchatPatternsList
+      : this.elements.conditionPatternsList;
+
+    const patterns = [];
+    list.querySelectorAll('.pattern-input').forEach(input => {
+      const value = input.value.trim();
+      if (value) patterns.push(value);
+    });
+    return patterns;
+  }
+
+  /**
+   * パターンリストを設定
+   */
+  _setPatterns(type, patterns) {
+    const list = type === 'superchat'
+      ? this.elements.superchatPatternsList
+      : this.elements.conditionPatternsList;
+
+    // 既存のパターンをクリア
+    list.innerHTML = '';
+
+    // パターンが空なら1つの空欄を追加
+    const patternsToShow = patterns && patterns.length > 0 ? patterns : [''];
+
+    patternsToShow.forEach((pattern, index) => {
+      const item = document.createElement('div');
+      item.className = 'pattern-item';
+      item.innerHTML = `
+        <input type="text" class="pattern-input" placeholder="検索テキスト" value="${this._escapeHtml(pattern)}">
+        <button type="button" class="btn btn-small btn-danger pattern-remove" style="display:none;">−</button>
+      `;
+
+      // 削除ボタンのイベント
+      item.querySelector('.pattern-remove').addEventListener('click', () => {
+        item.remove();
+        this._updatePatternRemoveButtons(type);
+        this._updateLogicGroupVisibility(type);
+      });
+
+      list.appendChild(item);
+    });
+
+    this._updatePatternRemoveButtons(type);
+    this._updateLogicGroupVisibility(type);
+  }
+
+  /**
+   * ロジック値を取得
+   */
+  _getLogic(type) {
+    const name = type === 'superchat' ? 'superchat-logic' : 'condition-logic';
+    const selected = document.querySelector(`input[name="${name}"]:checked`);
+    return selected ? selected.value : 'or';
+  }
+
+  /**
+   * ロジック値を設定
+   */
+  _setLogic(type, logic) {
+    const name = type === 'superchat' ? 'superchat-logic' : 'condition-logic';
+    const radio = document.querySelector(`input[name="${name}"][value="${logic || 'or'}"]`);
+    if (radio) radio.checked = true;
   }
 
   /**
@@ -628,6 +821,9 @@ class App {
       // everyTimeの場合は'superchat'のまま
     }
 
+    const patterns = this._getPatterns('condition');
+    const superchatPatterns = this._getPatterns('superchat');
+
     const rule = {
       id: this.editingRuleId,
       name: this.elements.ruleName.value.trim(),
@@ -635,8 +831,18 @@ class App {
       condition: {
         type: conditionType,
         matchType: this.elements.conditionMatchType.value,
-        value: this.elements.conditionValue.value.trim(),
+        patterns: patterns,
+        logic: this._getLogic('condition'),
+        ignoreCase: this.elements.conditionIgnoreCase.checked,
+        normalizeWidth: this.elements.conditionNormalizeWidth.checked,
         minAmount: parseInt(this.elements.conditionAmount.value) || 0,
+        // スーパーチャットテキスト判定
+        textMatch: this.elements.superchatTextMatch.checked,
+        textMatchType: this.elements.superchatMatchType.value,
+        textMatchPatterns: superchatPatterns,
+        textMatchLogic: this._getLogic('superchat'),
+        textMatchIgnoreCase: this.elements.superchatIgnoreCase.checked,
+        textMatchNormalizeWidth: this.elements.superchatNormalizeWidth.checked,
         threshold: parseInt(this.elements.conditionThreshold.value) || 10,
         countThreshold: parseInt(this.elements.conditionCountThreshold.value) || 3,
         totalThreshold: parseInt(this.elements.conditionTotalThreshold.value) || 10000,
@@ -659,8 +865,15 @@ class App {
     }
 
     // バリデーション: 条件の値（match, command時は必須）
-    if (['match', 'command'].includes(conditionType) && !rule.condition.value) {
-      this._showToast('条件の値を入力してください', 'error');
+    if (['match', 'command'].includes(conditionType) && rule.condition.patterns.length === 0) {
+      this._showToast('検索テキストを入力してください', 'error');
+      return;
+    }
+
+    // バリデーション: スーパーチャットテキスト判定（有効時は検索テキスト必須）
+    if (['superchat', 'superchatCount', 'superchatTotal'].includes(conditionType) &&
+        rule.condition.textMatch && rule.condition.textMatchPatterns.length === 0) {
+      this._showToast('検索テキストを入力してください', 'error');
       return;
     }
 
@@ -797,8 +1010,22 @@ class App {
       text += `(${matchTypeLabels[condition.matchType] || condition.matchType})`;
     }
 
-    if (condition.value) {
-      text += ` "${condition.value}"`;
+    // パターン表示（複数パターン対応）
+    const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+    if (patterns.length > 0) {
+      if (patterns.length === 1) {
+        text += ` 「${patterns[0]}」`;
+      } else {
+        const logic = condition.logic === 'and' ? 'AND' : 'OR';
+        text += ` 「${patterns.join(`」${logic}「`)}」`;
+      }
+      // テキストオプション表示
+      const options = [];
+      if (condition.ignoreCase) options.push('大小無視');
+      if (condition.normalizeWidth) options.push('全半角無視');
+      if (options.length > 0) {
+        text += ` [${options.join('/')}]`;
+      }
     }
 
     if (condition.type === 'superchat' && condition.minAmount > 0) {
@@ -806,7 +1033,7 @@ class App {
     }
 
     if (condition.type === 'superchatCount') {
-      let detail = `${condition.countThreshold || 3}回目`;
+      let detail = `${condition.countThreshold || 3}回以上`;
       if (condition.minAmount > 0) {
         detail += ` ¥${condition.minAmount}以上`;
       }
@@ -815,6 +1042,27 @@ class App {
 
     if (condition.type === 'superchatTotal') {
       text += ` (¥${condition.totalThreshold || 10000}達成)`;
+    }
+
+    // スーパーチャットのテキスト判定（複数パターン対応）
+    if (['superchat', 'superchatCount', 'superchatTotal'].includes(condition.type) && condition.textMatch) {
+      const scPatterns = condition.textMatchPatterns || (condition.textMatchValue ? [condition.textMatchValue] : []);
+      if (scPatterns.length > 0) {
+        const matchLabel = matchTypeLabels[condition.textMatchType] || '含有';
+        if (scPatterns.length === 1) {
+          text += ` + ${matchLabel}「${scPatterns[0]}」`;
+        } else {
+          const scLogic = condition.textMatchLogic === 'and' ? 'AND' : 'OR';
+          text += ` + ${matchLabel}「${scPatterns.join(`」${scLogic}「`)}」`;
+        }
+        // テキストオプション表示
+        const scOptions = [];
+        if (condition.textMatchIgnoreCase) scOptions.push('大小無視');
+        if (condition.textMatchNormalizeWidth) scOptions.push('全半角無視');
+        if (scOptions.length > 0) {
+          text += ` [${scOptions.join('/')}]`;
+        }
+      }
     }
 
     if (condition.type === 'commentCount' && condition.threshold > 0) {

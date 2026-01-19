@@ -210,47 +210,108 @@ class EventEngine {
   }
 
   /**
-   * テキスト一致チェック
+   * テキストを正規化（大文字小文字、半角全角）
    */
-  _checkMatch(condition, message) {
-    if (!condition.value) return false;
+  _normalizeText(text, options = {}) {
+    let result = text;
 
-    const text = message.message || '';
-    const value = condition.value;
-    const matchType = condition.matchType || 'contains';
+    // 大文字小文字を区別しない
+    if (options.ignoreCase) {
+      result = result.toLowerCase();
+    }
 
+    // 半角全角を区別しない（全角を半角に変換）
+    if (options.normalizeWidth) {
+      result = result
+        // 全角英数字を半角に
+        .replace(/[\uFF01-\uFF5E]/g, ch =>
+          String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+        )
+        // 全角スペースを半角に
+        .replace(/\u3000/g, ' ')
+        // 全角カタカナを半角に
+        .replace(/[\u30A1-\u30F6]/g, ch => {
+          const kana = 'ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロワヲンヴ';
+          const hankaku = 'ｧｱｨｲｩｳｪｴｫｵｶｶﾞｷｷﾞｸｸﾞｹｹﾞｺｺﾞｻｻﾞｼｼﾞｽｽﾞｾｾﾞｿｿﾞﾀﾀﾞﾁﾁﾞｯﾂﾂﾞﾃﾃﾞﾄﾄﾞﾅﾆﾇﾈﾉﾊﾊﾞﾊﾟﾋﾋﾞﾋﾟﾌﾌﾞﾌﾟﾍﾍﾞﾍﾟﾎﾎﾞﾎﾟﾏﾐﾑﾒﾓｬﾔｭﾕｮﾖﾗﾘﾙﾚﾛﾜｦﾝｳﾞ';
+          const idx = kana.indexOf(ch);
+          return idx >= 0 ? hankaku[idx] : ch;
+        });
+    }
+
+    return result;
+  }
+
+  /**
+   * 単一パターンをテスト
+   */
+  _testSinglePattern(text, pattern, matchType) {
     switch (matchType) {
       case 'startsWith':
-        return text.startsWith(value);
-
+        return text.startsWith(pattern);
       case 'endsWith':
-        return text.endsWith(value);
-
+        return text.endsWith(pattern);
       case 'exact':
-        return text === value;
-
+        return text === pattern;
       case 'contains':
       default:
-        return text.includes(value);
+        return text.includes(pattern);
     }
   }
 
   /**
-   * コマンドチェック (!xxx形式)
+   * テキスト一致チェック（複数パターン対応）
+   */
+  _checkMatch(condition, message) {
+    // 後方互換性: valueがある場合はpatternsに変換
+    const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+    if (patterns.length === 0) return false;
+
+    const options = {
+      ignoreCase: condition.ignoreCase || false,
+      normalizeWidth: condition.normalizeWidth || false
+    };
+
+    const text = this._normalizeText(message.message || '', options);
+    const matchType = condition.matchType || 'contains';
+    const logic = condition.logic || 'or';
+
+    const results = patterns.map(pattern => {
+      const normalizedPattern = this._normalizeText(pattern, options);
+      return this._testSinglePattern(text, normalizedPattern, matchType);
+    });
+
+    // AND: すべてマッチ、OR: いずれかマッチ
+    return logic === 'and' ? results.every(r => r) : results.some(r => r);
+  }
+
+  /**
+   * コマンドチェック (!xxx形式、複数パターン対応)
    */
   _checkCommand(condition, message) {
-    if (!condition.value) return false;
+    // 後方互換性: valueがある場合はpatternsに変換
+    const patterns = condition.patterns || (condition.value ? [condition.value] : []);
+    if (patterns.length === 0) return false;
 
-    const text = (message.message || '').trim();
-    let command = condition.value;
+    const options = {
+      ignoreCase: condition.ignoreCase || false,
+      normalizeWidth: condition.normalizeWidth || false
+    };
 
-    // !で始まっていなければ追加
-    if (!command.startsWith('!')) {
-      command = '!' + command;
-    }
+    const text = this._normalizeText((message.message || '').trim(), options);
+    const logic = condition.logic || 'or';
 
-    // コマンドは行頭でマッチ（完全一致またはスペース区切り）
-    return text === command || text.startsWith(command + ' ');
+    const results = patterns.map(pattern => {
+      let command = this._normalizeText(pattern, options);
+      // !で始まっていなければ追加
+      if (!command.startsWith('!')) {
+        command = '!' + command;
+      }
+      // コマンドは行頭でマッチ（完全一致またはスペース区切り）
+      return text === command || text.startsWith(command + ' ');
+    });
+
+    // AND: すべてマッチ、OR: いずれかマッチ
+    return logic === 'and' ? results.every(r => r) : results.some(r => r);
   }
 
   /**
@@ -266,6 +327,9 @@ class EventEngine {
         return false;
       }
     }
+
+    // テキスト判定（有効な場合のみ）
+    if (!this._checkSuperchatTextMatch(condition, message)) return false;
 
     return true;
   }
@@ -337,6 +401,9 @@ class EventEngine {
     if (!message.superchat) return false;
     if (!this.streamEventSender?.sessionManager) return false;
 
+    // テキスト判定（有効な場合のみ）
+    if (!this._checkSuperchatTextMatch(condition, message)) return false;
+
     const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.countThreshold || 3;
 
@@ -351,6 +418,9 @@ class EventEngine {
     if (!message.superchat) return false;
     if (!this.streamEventSender?.sessionManager) return false;
 
+    // テキスト判定（有効な場合のみ）
+    if (!this._checkSuperchatTextMatch(condition, message)) return false;
+
     const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.totalThreshold || 10000;
     const currentAmount = this._parseSuperchatAmount(message.superchat);
@@ -358,6 +428,34 @@ class EventEngine {
 
     // 今回のスパチャで閾値を超えた場合のみトリガー（以前は未達だった）
     return previousTotal < threshold && stats.totalSuperChat >= threshold;
+  }
+
+  /**
+   * スーパーチャットのテキスト判定（共通ヘルパー、複数パターン対応）
+   */
+  _checkSuperchatTextMatch(condition, message) {
+    if (!condition.textMatch) return true;
+
+    // 後方互換性: textMatchValueがある場合はtextMatchPatternsに変換
+    const patterns = condition.textMatchPatterns || (condition.textMatchValue ? [condition.textMatchValue] : []);
+    if (patterns.length === 0) return true;
+
+    const options = {
+      ignoreCase: condition.textMatchIgnoreCase || false,
+      normalizeWidth: condition.textMatchNormalizeWidth || false
+    };
+
+    const text = this._normalizeText(message.message || '', options);
+    const matchType = condition.textMatchType || 'contains';
+    const logic = condition.textMatchLogic || 'or';
+
+    const results = patterns.map(pattern => {
+      const normalizedPattern = this._normalizeText(pattern, options);
+      return this._testSinglePattern(text, normalizedPattern, matchType);
+    });
+
+    // AND: すべてマッチ、OR: いずれかマッチ
+    return logic === 'and' ? results.every(r => r) : results.some(r => r);
   }
 
   /**
