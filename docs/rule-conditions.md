@@ -24,6 +24,8 @@
 | コメント数（全体累計） | `commentCount` | 配信全体のコメント数 |
 | ギフト数（全体累計） | `membership` | 配信全体のギフト数 |
 | メンバー加入数（全体累計） | `membershipCount` | 配信全体のメンバー加入数 |
+| 同時接続数 | `viewerCount` | 同時接続数が閾値に達した時 |
+| 高評価数 | `likeCount` | 高評価数が閾値に達した時 |
 
 ---
 
@@ -168,11 +170,11 @@ _checkCommand(condition, message) {
 {
   type: "superchat",
   mode: "count",
-  countThreshold: 10  // 10回目のスパチャで発火
+  countThreshold: 10  // 10回以上のスパチャで発火
 }
 ```
 
-> **注意**: 閾値に「達した瞬間」のみ発火します（例: 10回目のスパチャで発火、11回目以降は発火しない）。
+> **注意**: 閾値以上で発火条件を満たします。連続発火を防ぐには「1度だけ送信」オプションを使用してください。
 
 ### 累計金額モード (total)
 
@@ -211,7 +213,7 @@ _checkCommand(condition, message) {
 ```javascript
 {
   type: "commentCount",
-  threshold: 100  // 100コメント目で発火
+  threshold: 100  // 100コメント以上で発火
 }
 ```
 
@@ -222,12 +224,12 @@ _checkCommentCount(condition, message) {
   const stats = this.streamEventSender.sessionManager.getStats();
   const threshold = condition.threshold || 10;
 
-  // ちょうど閾値に達した時のみ発火
-  return stats.totalMessages === threshold;
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return stats.totalMessages >= threshold;
 }
 ```
 
-> **ユースケース**: 「100コメント達成！」などのマイルストーン演出に使用。
+> **ユースケース**: 「100コメント達成！」などのマイルストーン演出に使用。連続発火を防ぐには「1度だけ送信」オプションを使用してください。
 
 ---
 
@@ -247,7 +249,7 @@ _checkCommentCount(condition, message) {
 ```javascript
 {
   type: "membership",
-  giftThreshold: 50  // 累計50ギフト達成時に発火
+  giftThreshold: 50  // 累計50ギフト以上で発火
 }
 ```
 
@@ -261,13 +263,12 @@ _checkMembership(condition, message) {
   const stats = this.streamEventSender.sessionManager.getStats();
   const threshold = condition.giftThreshold || 10;
 
-  // 閾値以上かつ、今回のギフトで閾値を超えた場合
-  const previousTotal = stats.totalGifts - (message.membershipGift.count || 1);
-  return previousTotal < threshold && stats.totalGifts >= threshold;
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return stats.totalGifts >= threshold;
 }
 ```
 
-> **ユースケース**: 「50ギフト達成！」などの演出に使用。
+> **ユースケース**: 「50ギフト達成！」などの演出に使用。連続発火を防ぐには「1度だけ送信」オプションを使用してください。
 
 ---
 
@@ -327,9 +328,96 @@ _checkMembershipCount(condition, message) {
     ? stats.totalMembersWithGifts
     : stats.totalNewMembers;
 
-  return currentCount === threshold;
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return currentCount >= threshold;
 }
 ```
+
+> **ユースケース**: 「10人メンバー達成！」などの演出に使用。連続発火を防ぐには「1度だけ送信」オプションを使用してください。
+
+---
+
+## 同時接続数 (viewerCount)
+
+同時接続数（視聴者数）が閾値に達した時に発火します。
+
+> **Note**: この機能にはChrome拡張機能 v1.2.0以上が必要です。
+
+### パラメータ
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `viewerThreshold` | number | 発火する同時接続数（デフォルト: 100） |
+
+### 設定例
+
+```javascript
+{
+  type: "viewerCount",
+  viewerThreshold: 1000
+}
+```
+
+### 判定ロジック
+
+```javascript
+_checkViewerCount(condition, stats) {
+  const threshold = condition.viewerThreshold || 100;
+  const current = stats.current?.concurrentViewers || 0;
+
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return current >= threshold;
+}
+```
+
+### 注意事項
+
+- YouTube統計は10〜30秒間隔で更新されるため、リアルタイム性は限定的です
+- 閾値以上であれば発火条件を満たします
+- 連続発火を防ぐには「1度だけ送信」オプションまたはクールダウンを設定してください
+- 複数の閾値（100人、500人、1000人）を設定したい場合は、それぞれ別のルールを作成してください
+
+---
+
+## 高評価数 (likeCount)
+
+高評価数（いいね数）が閾値に達した時に発火します。
+
+> **Note**: この機能にはChrome拡張機能 v1.2.0以上が必要です。
+
+### パラメータ
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `likeThreshold` | number | 発火する高評価数（デフォルト: 100） |
+
+### 設定例
+
+```javascript
+{
+  type: "likeCount",
+  likeThreshold: 500
+}
+```
+
+### 判定ロジック
+
+```javascript
+_checkLikeCount(condition, stats) {
+  const threshold = condition.likeThreshold || 100;
+  const current = stats.current?.likeCount || 0;
+
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return current >= threshold;
+}
+```
+
+### 注意事項
+
+- YouTube統計は10〜30秒間隔で更新されるため、リアルタイム性は限定的です
+- 閾値以上であれば発火条件を満たします
+- 連続発火を防ぐには「1度だけ送信」オプションまたはクールダウンを設定してください
+- 複数の閾値を設定したい場合は、それぞれ別のルールを作成してください
 
 ---
 
@@ -348,6 +436,13 @@ _checkMembershipCount(condition, message) {
 
 1. **cooldown**: 指定秒数が経過するまで同一ルールは発火しない
 2. **onceOnly**: セッション中に1度発火したら、以降は発火しない
+
+### 1度だけ送信（onceOnly）の詳細
+
+- ルール一覧で「1度だけ」のバッジが表示されます
+- 発火後は「1度だけ・起動済」に変わり、ルールがグレー表示になります
+- **起動済み状態はセッションデータと一緒に保存されます**（ページリロード後も維持）
+- セッションリセット時にクリアされます
 
 ### 設定例
 

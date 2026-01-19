@@ -240,6 +240,8 @@
                 <option value="commentCount">コメント数（全体累計）</option>
                 <option value="membership">ギフト数（全体累計）</option>
                 <option value="membershipCount">メンバー加入数（全体累計）</option>
+                <option value="viewerCount">同時接続数</option>
+                <option value="likeCount">高評価数</option>
               </select>
             </div>
             <div class="form-group" id="superchat-mode-group" style="display:none;">
@@ -293,6 +295,14 @@
                 ギフトを含める
               </label>
             </div>
+            <div class="form-group" id="condition-viewer-threshold-group" style="display:none;">
+              <label for="condition-viewer-threshold">同時接続数閾値 (人)</label>
+              <input type="number" id="condition-viewer-threshold" value="100" min="1">
+            </div>
+            <div class="form-group" id="condition-like-threshold-group" style="display:none;">
+              <label for="condition-like-threshold">高評価数閾値 (件)</label>
+              <input type="number" id="condition-like-threshold" value="100" min="1">
+            </div>
           </fieldset>
 
           <fieldset class="form-group">
@@ -308,16 +318,16 @@
           </fieldset>
 
           <fieldset class="form-group">
-            <legend>クールダウン</legend>
-            <div class="form-group">
-              <label for="rule-cooldown">秒数</label>
-              <input type="number" id="rule-cooldown" value="0" min="0">
-            </div>
+            <legend>発火制御</legend>
             <div class="form-group">
               <label for="rule-once-only">
-                <input type="checkbox" id="rule-once-only">
+                <input type="checkbox" id="rule-once-only" checked>
                 1度だけ送信（セッション中）
               </label>
+            </div>
+            <div class="form-group" id="rule-cooldown-group" style="display:none;">
+              <label for="rule-cooldown">クールダウン（秒）</label>
+              <input type="number" id="rule-cooldown" value="0" min="0">
             </div>
           </fieldset>
         </div>

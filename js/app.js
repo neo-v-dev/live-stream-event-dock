@@ -86,9 +86,14 @@ class App {
       conditionMemberCountThresholdGroup: document.getElementById('condition-member-count-threshold-group'),
       conditionIncludeGifts: document.getElementById('condition-include-gifts'),
       conditionIncludeGiftsGroup: document.getElementById('condition-include-gifts-group'),
+      conditionViewerThreshold: document.getElementById('condition-viewer-threshold'),
+      conditionViewerThresholdGroup: document.getElementById('condition-viewer-threshold-group'),
+      conditionLikeThreshold: document.getElementById('condition-like-threshold'),
+      conditionLikeThresholdGroup: document.getElementById('condition-like-threshold-group'),
       customEventType: document.getElementById('custom-event-type'),
       customData: document.getElementById('custom-data'),
       ruleCooldown: document.getElementById('rule-cooldown'),
+      ruleCooldownGroup: document.getElementById('rule-cooldown-group'),
       ruleOnceOnly: document.getElementById('rule-once-only'),
       saveRule: document.getElementById('save-rule'),
       cancelRule: document.getElementById('cancel-rule'),
@@ -143,6 +148,9 @@ class App {
     // 条件タイプ変更時のUI更新
     this.elements.conditionType.addEventListener('change', () => this._updateConditionUI());
 
+    // 1度だけ送信チェックボックス変更時のクールダウン表示切り替え
+    this.elements.ruleOnceOnly.addEventListener('change', () => this._updateCooldownUI());
+
     // スーパーチャットモードタブ切り替え
     document.querySelectorAll('.sub-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -168,6 +176,11 @@ class App {
     // OBSからのチャットメッセージ受信（YouTube Live Chat Extension経由）
     this.obsController.onChatMessage = (message) => {
       this._onChatMessage(message);
+    };
+
+    // OBSからのYouTube統計受信（YouTube Live Chat Extension v1.2.0+）
+    this.obsController.onStatsUpdate = (stats) => {
+      this._onStatsUpdate(stats);
     };
   }
 
@@ -361,6 +374,30 @@ class App {
     const triggered = await this.eventEngine.processMessage(message);
     if (triggered.length > 0) {
       console.log(`[Rule] ${triggered.length}件のルールがトリガーされました`);
+      // 発火済み状態を反映するためルール一覧を更新
+      this._updateRulesList();
+      // 起動済み状態を即座に保存
+      this._saveSession();
+    }
+  }
+
+  /**
+   * YouTube統計受信時
+   */
+  async _onStatsUpdate(stats) {
+    console.log(`[Stats] YouTube統計更新: 同接=${stats.concurrentViewers}, 高評価=${stats.likeCount}`);
+
+    // SessionManagerで統計を更新（前回値も保存）
+    const statsWithPrevious = this.sessionManager.updateYouTubeStats(stats);
+
+    // イベントエンジンでYouTube統計系ルールを処理
+    const triggered = await this.eventEngine.processStats(statsWithPrevious);
+    if (triggered.length > 0) {
+      console.log(`[Rule] ${triggered.length}件のYouTube統計ルールがトリガーされました`);
+      // 発火済み状態を反映するためルール一覧を更新
+      this._updateRulesList();
+      // 起動済み状態を即座に保存
+      this._saveSession();
     }
   }
 
@@ -433,6 +470,7 @@ class App {
     }
 
     this._updateConditionUI();
+    this._updateCooldownUI();
     this.elements.ruleModal.classList.remove('hidden');
   }
 
@@ -477,14 +515,16 @@ class App {
     this.elements.conditionGiftThreshold.value = condition.giftThreshold || 10;
     this.elements.conditionMemberCountThreshold.value = condition.memberCountThreshold || 10;
     this.elements.conditionIncludeGifts.checked = condition.includeGifts || false;
+    this.elements.conditionViewerThreshold.value = condition.viewerThreshold || 100;
+    this.elements.conditionLikeThreshold.value = condition.likeThreshold || 100;
 
     // カスタムイベント
     this.elements.customEventType.value = rule.customEventType || '';
     this.elements.customData.value = rule.customData || '';
 
-    // クールダウン
+    // 発火制御
     this.elements.ruleCooldown.value = rule.cooldown || 0;
-    this.elements.ruleOnceOnly.checked = rule.onceOnly || false;
+    this.elements.ruleOnceOnly.checked = rule.onceOnly !== false; // デフォルトtrue
   }
 
   /**
@@ -532,12 +572,28 @@ class App {
     this.elements.conditionMemberCountThresholdGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
     this.elements.conditionIncludeGiftsGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
 
+    // 同時接続数閾値の表示/非表示（viewerCount時のみ）
+    const showViewerThreshold = type === 'viewerCount';
+    this.elements.conditionViewerThresholdGroup.style.display = showViewerThreshold ? 'block' : 'none';
+
+    // 高評価数閾値の表示/非表示（likeCount時のみ）
+    const showLikeThreshold = type === 'likeCount';
+    this.elements.conditionLikeThresholdGroup.style.display = showLikeThreshold ? 'block' : 'none';
+
     // プレースホルダー更新
     const placeholders = {
       match: '検索テキスト',
       command: 'コマンド名'
     };
     this.elements.conditionValue.placeholder = placeholders[type] || '';
+  }
+
+  /**
+   * クールダウンUI更新（1度だけ送信がオフの時のみ表示）
+   */
+  _updateCooldownUI() {
+    const onceOnly = this.elements.ruleOnceOnly.checked;
+    this.elements.ruleCooldownGroup.style.display = onceOnly ? 'none' : 'block';
   }
 
   /**
@@ -586,7 +642,9 @@ class App {
         totalThreshold: parseInt(this.elements.conditionTotalThreshold.value) || 10000,
         giftThreshold: parseInt(this.elements.conditionGiftThreshold.value) || 1,
         memberCountThreshold: parseInt(this.elements.conditionMemberCountThreshold.value) || 10,
-        includeGifts: this.elements.conditionIncludeGifts.checked
+        includeGifts: this.elements.conditionIncludeGifts.checked,
+        viewerThreshold: parseInt(this.elements.conditionViewerThreshold.value) || 100,
+        likeThreshold: parseInt(this.elements.conditionLikeThreshold.value) || 100
       },
       customEventType: this.elements.customEventType.value.trim(),
       customData: this.elements.customData.value.trim(),
@@ -653,21 +711,30 @@ class App {
       return;
     }
 
-    list.innerHTML = rules.map(rule => `
-      <div class="rule-item ${rule.enabled ? '' : 'disabled'}" data-id="${rule.id}">
-        <div class="rule-header">
-          <span class="rule-name">${this._escapeHtml(rule.name)}</span>
-          <div class="rule-actions">
-            <button class="btn btn-small btn-secondary rule-edit">編集</button>
-            <button class="btn btn-small btn-danger rule-delete">削除</button>
+    list.innerHTML = rules.map(rule => {
+      const isTriggered = this.eventEngine.isTriggeredOnce(rule.id);
+      const onceOnlyBadge = rule.onceOnly
+        ? (isTriggered
+          ? '<span class="badge badge-triggered">1度だけ・起動済</span>'
+          : '<span class="badge badge-once">1度だけ</span>')
+        : '';
+
+      return `
+        <div class="rule-item ${rule.enabled ? '' : 'disabled'} ${isTriggered ? 'triggered' : ''}" data-id="${rule.id}">
+          <div class="rule-header">
+            <span class="rule-name">${this._escapeHtml(rule.name)}${onceOnlyBadge}</span>
+            <div class="rule-actions">
+              <button class="btn btn-small btn-secondary rule-edit">編集</button>
+              <button class="btn btn-small btn-danger rule-delete">削除</button>
+            </div>
+          </div>
+          <div class="rule-details">
+            <div class="rule-condition">条件: ${this._formatCondition(rule.condition)}</div>
+            <div class="rule-action">イベント: ${this._escapeHtml(rule.customEventType || '未設定')}</div>
           </div>
         </div>
-        <div class="rule-details">
-          <div class="rule-condition">条件: ${this._formatCondition(rule.condition)}</div>
-          <div class="rule-action">イベント: ${this._escapeHtml(rule.customEventType || '未設定')}</div>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // イベントリスナーを設定
     list.querySelectorAll('.rule-edit').forEach(btn => {
@@ -710,7 +777,10 @@ class App {
       superchatCount: 'スパチャ（回数）',
       superchatTotal: 'スパチャ（累計）',
       commentCount: 'コメント数',
-      membership: 'メンバーシップ'
+      membership: 'メンバーシップ',
+      membershipCount: 'メンバー加入数',
+      viewerCount: '同時接続数',
+      likeCount: '高評価数'
     };
 
     const matchTypeLabels = {
@@ -759,6 +829,22 @@ class App {
       text += ` (${detail})`;
     }
 
+    if (condition.type === 'membershipCount') {
+      let detail = `${condition.memberCountThreshold || 10}人`;
+      if (condition.includeGifts) {
+        detail += ' (ギフト含む)';
+      }
+      text += ` (${detail})`;
+    }
+
+    if (condition.type === 'viewerCount') {
+      text += ` (${condition.viewerThreshold || 100}人達成)`;
+    }
+
+    if (condition.type === 'likeCount') {
+      text += ` (${condition.likeThreshold || 100}件達成)`;
+    }
+
     return text;
   }
 
@@ -801,6 +887,8 @@ class App {
    */
   _saveSession() {
     const sessionData = this.sessionManager.exportData();
+    // 発火済みルールIDも含める
+    sessionData.triggeredOnce = this.eventEngine.exportTriggeredOnce();
     storage.saveSessionData(sessionData);
     console.log('[App] セッション保存完了');
   }
@@ -813,6 +901,10 @@ class App {
     if (sessionData) {
       const success = this.sessionManager.importData(sessionData);
       if (success) {
+        // 発火済みルールIDも復元
+        if (sessionData.triggeredOnce) {
+          this.eventEngine.importTriggeredOnce(sessionData.triggeredOnce);
+        }
         const stats = this.sessionManager.getStats();
         console.log('[App] セッション復元完了:', {
           users: stats.uniqueUsers,
@@ -821,6 +913,8 @@ class App {
           gifts: stats.totalGifts,
           newMembers: stats.totalNewMembers
         });
+        // ルール一覧を更新（起動済み状態を反映）
+        this._updateRulesList();
       }
     } else {
       console.log('[App] 復元可能なセッションなし');
@@ -841,6 +935,9 @@ class App {
 
     // OBSのcommentedUsersもリセット
     this.obsController.commentedUsers?.clear();
+
+    // ルール一覧を更新（起動済み状態をクリア）
+    this._updateRulesList();
 
     this._showToast('セッションをリセットしました');
     console.log('[App] セッションリセット完了');

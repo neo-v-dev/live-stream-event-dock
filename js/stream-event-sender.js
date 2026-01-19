@@ -80,7 +80,8 @@ class StreamEventSender {
       giftTotal: stats.totalGifts,
       newMemberTotal: stats.totalNewMembers,
       uniqueUsers: stats.uniqueUsers,
-      totalMessages: stats.totalMessages
+      totalMessages: stats.totalMessages,
+      youtube: stats.youtube
     });
   }
 

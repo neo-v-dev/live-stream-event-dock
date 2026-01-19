@@ -78,6 +78,29 @@ class EventEngine {
   }
 
   /**
+   * ルールが発火済みかどうかを確認
+   */
+  isTriggeredOnce(ruleId) {
+    return this.triggeredOnce.has(ruleId);
+  }
+
+  /**
+   * 発火済みルールIDをエクスポート（保存用）
+   */
+  exportTriggeredOnce() {
+    return Array.from(this.triggeredOnce);
+  }
+
+  /**
+   * 発火済みルールIDをインポート（復元用）
+   */
+  importTriggeredOnce(ruleIds) {
+    if (!ruleIds || !Array.isArray(ruleIds)) return;
+    this.triggeredOnce = new Set(ruleIds);
+    console.log('[Event] 発火済みルール復元:', ruleIds.length, '件');
+  }
+
+  /**
    * ユニークIDを生成
    */
   _generateId() {
@@ -175,6 +198,11 @@ class EventEngine {
       case 'membershipCount':
         return this._checkMembershipCount(condition, message);
 
+      // YouTube統計系はprocessStats()で処理するためここではfalse
+      case 'viewerCount':
+      case 'likeCount':
+        return false;
+
       default:
         console.log(`[Event] 不明な条件タイプ: ${condition.type}`);
         return false;
@@ -254,8 +282,8 @@ class EventEngine {
     const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.giftThreshold || 10;
 
-    // ちょうど閾値に達した時のみトリガー
-    return stats.totalGifts === threshold;
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return stats.totalGifts >= threshold;
   }
 
   /**
@@ -283,8 +311,8 @@ class EventEngine {
     // ギフトを含める場合は totalMembersWithGifts、そうでなければ totalNewMembers
     const currentCount = includeGifts ? stats.totalMembersWithGifts : stats.totalNewMembers;
 
-    // ちょうど閾値に達した時のみトリガー
-    return currentCount === threshold;
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return currentCount >= threshold;
   }
 
   /**
@@ -298,8 +326,8 @@ class EventEngine {
     const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.threshold || 10;
 
-    // ちょうど閾値に達した時のみトリガー
-    return stats.totalMessages === threshold;
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return stats.totalMessages >= threshold;
   }
 
   /**
@@ -312,8 +340,8 @@ class EventEngine {
     const stats = this.streamEventSender.sessionManager.getStats();
     const threshold = condition.countThreshold || 3;
 
-    // ちょうど閾値に達した時のみトリガー
-    return stats.totalSuperChatCount === threshold;
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return stats.totalSuperChatCount >= threshold;
   }
 
   /**
@@ -340,6 +368,124 @@ class EventEngine {
       return Math.round(parseInt(superchat.amountMicros) / 1000000);
     }
     return 0;
+  }
+
+  /**
+   * YouTube統計を処理（条件判定＆アクション実行）
+   * @param {Object} stats - { current, previous } YouTube統計
+   */
+  async processStats(stats) {
+    const triggeredRules = [];
+
+    for (const rule of this.rules) {
+      // 無効なルールはスキップ
+      if (!rule.enabled) continue;
+
+      // YouTube統計系の条件のみ処理
+      const conditionType = rule.condition?.type;
+      if (conditionType !== 'viewerCount' && conditionType !== 'likeCount') {
+        continue;
+      }
+
+      // 1度だけ送信で既に送信済み
+      if (rule.onceOnly && this.triggeredOnce.has(rule.id)) {
+        continue;
+      }
+
+      // クールダウンチェック
+      if (this._isOnCooldown(rule)) {
+        console.log(`[Event] ルール "${rule.name}" はクールダウン中`);
+        continue;
+      }
+
+      // 条件チェック
+      let matched = false;
+      if (conditionType === 'viewerCount') {
+        matched = this._checkViewerCount(rule.condition, stats);
+      } else if (conditionType === 'likeCount') {
+        matched = this._checkLikeCount(rule.condition, stats);
+      }
+
+      if (matched) {
+        console.log(`[Event] ルール "${rule.name}" がマッチ！（YouTube統計）`);
+        triggeredRules.push(rule);
+
+        // アクション実行（カスタムイベント送信）
+        try {
+          await this._executeStatsAction(rule, stats);
+          this.lastTriggered.set(rule.id, Date.now());
+
+          if (rule.onceOnly) {
+            this.triggeredOnce.add(rule.id);
+          }
+
+          console.log(`[Event]   → カスタムイベント送信成功`);
+        } catch (error) {
+          console.error(`[Event]   → アクション実行エラー:`, error);
+        }
+      }
+    }
+
+    return triggeredRules;
+  }
+
+  /**
+   * 同時接続数チェック（閾値以上で発火）
+   */
+  _checkViewerCount(condition, stats) {
+    const threshold = condition.viewerThreshold || 100;
+    const current = stats.current?.concurrentViewers || 0;
+
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return current >= threshold;
+  }
+
+  /**
+   * 高評価数チェック（閾値以上で発火）
+   */
+  _checkLikeCount(condition, stats) {
+    const threshold = condition.likeThreshold || 100;
+    const current = stats.current?.likeCount || 0;
+
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return current >= threshold;
+  }
+
+  /**
+   * 統計系アクションを実行（カスタムイベント送信）
+   */
+  async _executeStatsAction(rule, stats) {
+    if (!this.streamEventSender) {
+      console.warn('[Event] StreamEventSenderが設定されていません');
+      return;
+    }
+
+    const customEventType = rule.customEventType || 'Custom';
+    let customData = null;
+
+    if (rule.customData) {
+      try {
+        customData = JSON.parse(rule.customData);
+      } catch (e) {
+        console.error('[Event] customDataのパースエラー:', e);
+      }
+    }
+
+    // YouTube統計用のダミーメッセージを作成
+    const statsMessage = {
+      message: '',
+      authorName: 'YouTube Stats',
+      authorChannelId: '',
+      youtubeStats: stats.current
+    };
+
+    await this.streamEventSender.sendCustomEvent(
+      customEventType,
+      rule.id,
+      rule.name,
+      statsMessage,
+      customData
+    );
   }
 
   /**
@@ -389,12 +535,14 @@ class EventEngine {
         totalThreshold: 10000,
         giftThreshold: 10,
         memberCountThreshold: 10,
-        includeGifts: false
+        includeGifts: false,
+        viewerThreshold: 100,
+        likeThreshold: 100
       },
       customEventType: '',
       customData: '',
       cooldown: 0,
-      onceOnly: false
+      onceOnly: true
     };
   }
 }

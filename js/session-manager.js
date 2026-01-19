@@ -15,6 +15,21 @@ class SessionManager {
     // セッションレベルのカウンター（新規メンバー数）
     this.newMemberCount = 0;
 
+    // YouTube統計データ
+    this.youtubeStats = {
+      concurrentViewers: 0,
+      likeCount: 0,
+      viewCount: 0,
+      lastUpdated: null
+    };
+
+    // 前回のYouTube統計（閾値判定用）
+    this.previousYoutubeStats = {
+      concurrentViewers: 0,
+      likeCount: 0,
+      viewCount: 0
+    };
+
     // 設定
     this.config = {
       maxUsers: 1000  // メモリリーク防止
@@ -71,6 +86,20 @@ class SessionManager {
     this.users.clear();
     this.startedAt = new Date().toISOString();
     this.newMemberCount = 0;
+
+    // YouTube統計もリセット
+    this.youtubeStats = {
+      concurrentViewers: 0,
+      likeCount: 0,
+      viewCount: 0,
+      lastUpdated: null
+    };
+    this.previousYoutubeStats = {
+      concurrentViewers: 0,
+      likeCount: 0,
+      viewCount: 0
+    };
+
     console.log('[Session] 新しいセッション開始:', this.sessionId);
   }
 
@@ -381,7 +410,47 @@ class SessionManager {
       totalSuperChatCount,
       totalGifts,
       totalNewMembers: this.newMemberCount,
-      totalMembersWithGifts: this.newMemberCount + totalGifts
+      totalMembersWithGifts: this.newMemberCount + totalGifts,
+      youtube: {
+        concurrentViewers: this.youtubeStats.concurrentViewers,
+        likeCount: this.youtubeStats.likeCount,
+        viewCount: this.youtubeStats.viewCount
+      }
+    };
+  }
+
+  /**
+   * YouTube統計を更新
+   * @param {Object} stats - { concurrentViewers, likeCount, viewCount }
+   * @returns {Object} 前回との差分情報
+   */
+  updateYouTubeStats(stats) {
+    // 前回値を保存
+    this.previousYoutubeStats = { ...this.youtubeStats };
+
+    // 現在値を更新
+    this.youtubeStats = {
+      concurrentViewers: stats.concurrentViewers || 0,
+      likeCount: stats.likeCount || 0,
+      viewCount: stats.viewCount || 0,
+      lastUpdated: new Date().toISOString()
+    };
+
+    console.log('[Session] YouTube統計更新:', this.youtubeStats);
+
+    return {
+      current: this.youtubeStats,
+      previous: this.previousYoutubeStats
+    };
+  }
+
+  /**
+   * YouTube統計を取得
+   */
+  getYouTubeStats() {
+    return {
+      current: { ...this.youtubeStats },
+      previous: { ...this.previousYoutubeStats }
     };
   }
 }

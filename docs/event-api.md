@@ -251,6 +251,10 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
 | `payload.newMemberTotal` | number | 新規メンバー累計数（ギフト除く） |
 | `payload.uniqueUsers` | number | ユニークユーザー数 |
 | `payload.totalMessages` | number | 総メッセージ数 |
+| `payload.youtube` | object | YouTube統計（v1.2.0+） |
+| `payload.youtube.concurrentViewers` | number | 同時接続数 |
+| `payload.youtube.likeCount` | number | 高評価数 |
+| `payload.youtube.viewCount` | number | 総視聴回数 |
 
 ```javascript
 {
@@ -262,12 +266,18 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
     giftTotal: 25,
     newMemberTotal: 10,
     uniqueUsers: 150,
-    totalMessages: 500
+    totalMessages: 500,
+    youtube: {
+      concurrentViewers: 1234,
+      likeCount: 500,
+      viewCount: 12345
+    }
   }
 }
 ```
 
 > **注意**: SessionStatsにはuser情報が含まれません。
+> **注意**: `youtube`プロパティはChrome拡張機能 v1.2.0以上が必要です。未対応の場合は値が0になります。
 
 ### Comment
 
@@ -494,3 +504,4 @@ receiver.connect();
 |-----------|------|---------|
 | 1.0.0 | 2025-01-15 | 初版リリース |
 | 1.1.0 | 2025-01-18 | SessionStatsにnewMemberTotal追加、セッション持続機能追加 |
+| 1.2.0 | 2026-01-18 | viewerCount/likeCount条件追加、SessionStatsにyoutube統計追加、起動済み状態の永続化 |

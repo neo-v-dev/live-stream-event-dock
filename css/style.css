@@ -279,6 +279,10 @@ fieldset.form-group legend {
   border-left-color: var(--text-muted);
 }
 
+.rule-item.triggered {
+  border-left-color: var(--text-muted);
+}
+
 .rule-header {
   display: flex;
   justify-content: space-between;
@@ -289,6 +293,26 @@ fieldset.form-group legend {
 .rule-name {
   font-weight: 600;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.badge-once {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.badge-triggered {
+  background: var(--text-muted);
+  color: var(--bg-primary);
 }
 
 .rule-actions {

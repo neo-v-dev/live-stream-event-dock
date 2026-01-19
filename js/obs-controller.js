@@ -12,6 +12,7 @@ class OBSController {
     this.onStatusChange = null;
     this.onError = null;
     this.onChatMessage = null;
+    this.onStatsUpdate = null;
 
     // 初コメント判定用
     this.commentedUsers = new Set();
@@ -67,13 +68,23 @@ class OBSController {
 
       // イベントハンドラ設定（YouTube Live Chat Extension対応）
       this.obs.onEvent = (eventType, eventData) => {
-        // eventData.eventName = 'YouTubeLiveChat'
-        // eventData.eventData = { snippet: {...}, authorDetails: {...} }
-        if (eventType === 'CustomEvent' && eventData?.eventName === 'YouTubeLiveChat') {
+        if (eventType !== 'CustomEvent') return;
+
+        // チャットメッセージ（YouTubeLiveChat）
+        if (eventData?.eventName === 'YouTubeLiveChat') {
           const message = this._convertChatMessage(eventData.eventData);
           if (message) {
             console.log('[OBS] チャットメッセージ受信:', message.authorName, message.message);
             this.onChatMessage?.(message);
+          }
+        }
+
+        // YouTube統計（YouTubeLiveStats）
+        if (eventData?.eventName === 'YouTubeLiveStats') {
+          const stats = this._convertYouTubeStats(eventData.eventData);
+          if (stats) {
+            console.log('[OBS] YouTube統計受信:', stats);
+            this.onStatsUpdate?.(stats);
           }
         }
       };
@@ -451,5 +462,24 @@ class OBSController {
     }
 
     return message;
+  }
+
+  /**
+   * YouTube統計データを内部形式に変換
+   */
+  _convertYouTubeStats(videoResource) {
+    if (!videoResource) return null;
+
+    const statistics = videoResource.statistics || {};
+    const liveDetails = videoResource.liveStreamingDetails || {};
+
+    return {
+      videoId: videoResource.id || '',
+      concurrentViewers: parseInt(liveDetails.concurrentViewers) || 0,
+      likeCount: parseInt(statistics.likeCount) || 0,
+      viewCount: parseInt(statistics.viewCount) || 0,
+      actualStartTime: liveDetails.actualStartTime || null,
+      timestamp: new Date().toISOString()
+    };
   }
 }
