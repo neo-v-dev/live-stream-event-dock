@@ -75,6 +75,62 @@ class SessionManager {
   }
 
   /**
+   * セッションデータをエクスポート（保存用）
+   */
+  exportData() {
+    // MapをArray形式に変換
+    const usersArray = Array.from(this.users.entries()).map(([channelId, userData]) => ({
+      channelId,
+      ...userData
+    }));
+
+    return {
+      sessionId: this.sessionId,
+      startedAt: this.startedAt,
+      newMemberCount: this.newMemberCount,
+      users: usersArray
+    };
+  }
+
+  /**
+   * セッションデータをインポート（復元用）
+   */
+  importData(data) {
+    if (!data) return false;
+
+    try {
+      this.sessionId = data.sessionId || this._generateSessionId();
+      this.startedAt = data.startedAt || new Date().toISOString();
+      this.newMemberCount = data.newMemberCount || 0;
+
+      // Array形式からMapに復元
+      this.users.clear();
+      if (data.users && Array.isArray(data.users)) {
+        for (const userData of data.users) {
+          const { channelId, ...rest } = userData;
+          if (channelId) {
+            this.users.set(channelId, {
+              channelId,
+              messageCount: rest.messageCount || 0,
+              superChatTotal: rest.superChatTotal || 0,
+              superChatCount: rest.superChatCount || 0,
+              giftCount: rest.giftCount || 0,
+              firstSeenAt: rest.firstSeenAt || new Date().toISOString(),
+              lastSeenAt: rest.lastSeenAt || new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      console.log('[Session] セッション復元:', this.sessionId, `(${this.users.size}ユーザー)`);
+      return true;
+    } catch (e) {
+      console.error('[Session] セッション復元エラー:', e);
+      return false;
+    }
+  }
+
+  /**
    * ユーザーセッションを取得または作成
    */
   getUser(channelId) {

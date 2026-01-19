@@ -15,6 +15,9 @@ class App {
     // セッション統計タイマー
     this.sessionStatsTimer = null;
 
+    // セッション保存タイマー
+    this.sessionSaveTimer = null;
+
     // DOM要素
     this.elements = {};
 
@@ -25,6 +28,12 @@ class App {
     this._loadEventSettings();
     this._loadRules();
     this._updateRulesList();
+
+    // セッション復元
+    this._restoreSession();
+
+    // 定期セッション保存（30秒ごと）
+    this._startSessionAutoSave();
   }
 
   /**
@@ -45,6 +54,7 @@ class App {
       saveSettings: document.getElementById('save-settings'),
       addRule: document.getElementById('add-rule'),
       clearLog: document.getElementById('clear-log'),
+      resetSession: document.getElementById('reset-session'),
 
       // リスト
       rulesList: document.getElementById('rules-list'),
@@ -121,6 +131,9 @@ class App {
 
     // ログクリア
     this.elements.clearLog.addEventListener('click', () => this._clearLog());
+
+    // セッションリセット
+    this.elements.resetSession?.addEventListener('click', () => this._resetSession());
 
     // モーダル
     document.querySelector('.modal-close').addEventListener('click', () => this._closeRuleModal());
@@ -779,6 +792,75 @@ class App {
     console.log(`[${type.toUpperCase()}] ${message}`);
 
     // TODO: 実際のトーストUIを実装する場合はここに追加
+  }
+
+  // ========== セッション永続化 ==========
+
+  /**
+   * セッションを保存
+   */
+  _saveSession() {
+    const sessionData = this.sessionManager.exportData();
+    storage.saveSessionData(sessionData);
+    console.log('[App] セッション保存完了');
+  }
+
+  /**
+   * セッションを復元
+   */
+  _restoreSession() {
+    const sessionData = storage.loadSessionData();
+    if (sessionData) {
+      const success = this.sessionManager.importData(sessionData);
+      if (success) {
+        const stats = this.sessionManager.getStats();
+        console.log('[App] セッション復元完了:', {
+          users: stats.uniqueUsers,
+          messages: stats.totalMessages,
+          superChat: stats.totalSuperChat,
+          gifts: stats.totalGifts,
+          newMembers: stats.totalNewMembers
+        });
+      }
+    } else {
+      console.log('[App] 復元可能なセッションなし');
+    }
+  }
+
+  /**
+   * セッションをリセット（新しい配信開始時）
+   */
+  _resetSession() {
+    if (!confirm('セッションをリセットしますか？\n累計データがすべてクリアされます。')) {
+      return;
+    }
+
+    this.sessionManager.reset();
+    this.eventEngine.resetSession();
+    storage.clearSessionData();
+
+    // OBSのcommentedUsersもリセット
+    this.obsController.commentedUsers?.clear();
+
+    this._showToast('セッションをリセットしました');
+    console.log('[App] セッションリセット完了');
+  }
+
+  /**
+   * 定期セッション保存を開始
+   */
+  _startSessionAutoSave() {
+    // 既存のタイマーがあれば停止
+    if (this.sessionSaveTimer) {
+      clearInterval(this.sessionSaveTimer);
+    }
+
+    // 30秒ごとに保存
+    this.sessionSaveTimer = setInterval(() => {
+      this._saveSession();
+    }, 30000);
+
+    console.log('[App] セッション自動保存開始（30秒間隔）');
   }
 }
 

@@ -146,6 +146,30 @@ class Storage {
       memberComment: { enabled: false }
     };
   }
+
+  /**
+   * セッションデータを保存
+   */
+  saveSessionData(sessionData) {
+    return this.set('sessionData', {
+      ...sessionData,
+      savedAt: new Date().toISOString()
+    });
+  }
+
+  /**
+   * セッションデータを読み込み
+   */
+  loadSessionData() {
+    return this.get('sessionData', null);
+  }
+
+  /**
+   * セッションデータをクリア
+   */
+  clearSessionData() {
+    return this.remove('sessionData');
+  }
 }
 
 // グローバルインスタンス
