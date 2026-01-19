@@ -86,9 +86,7 @@ class Storage {
    */
   loadSettings() {
     return this.get('settings', {
-      apiKey: '',
-      videoUrl: '',
-      obsAddress: 'ws://10.0.0.160:4455',
+      obsAddress: 'ws://localhost:4455',
       obsPassword: ''
     });
   }
@@ -105,6 +103,48 @@ class Storage {
    */
   loadRules() {
     return this.get('rules', []);
+  }
+
+  /**
+   * イベント設定を保存
+   */
+  saveEventSettings(eventSettings) {
+    return this.set('eventSettings', eventSettings);
+  }
+
+  /**
+   * イベント設定を読み込み
+   */
+  loadEventSettings() {
+    return this.get('eventSettings', this.getDefaultEventSettings());
+  }
+
+  /**
+   * デフォルトのイベント設定
+   */
+  getDefaultEventSettings() {
+    return {
+      // 全体設定
+      enabled: true,
+      eventName: 'StreamManager',
+      includeOriginal: false,
+
+      // 通常コメント転送
+      forwardComments: { enabled: false },
+
+      // 基本イベント
+      firstComment: { enabled: true },
+      superChat: { enabled: true },
+      membership: { enabled: true },
+      membershipGift: { enabled: true },
+      memberMilestone: { enabled: true },
+      sessionStats: { enabled: true },  // 累計統計（5秒毎+スパチャ/ギフト時）
+
+      // ロールベースイベント
+      moderatorComment: { enabled: false },
+      ownerComment: { enabled: false },
+      memberComment: { enabled: false }
+    };
   }
 }
 

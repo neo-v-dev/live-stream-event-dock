@@ -1,11 +1,20 @@
 /**
- * EventEngine - イベント条件判定エンジン
+ * EventEngine - イベント条件判定エンジン（刷新版）
  */
 class EventEngine {
-  constructor(obsController) {
+  constructor(obsController, streamEventSender = null) {
     this.obsController = obsController;
+    this.streamEventSender = streamEventSender;
     this.rules = [];
     this.lastTriggered = new Map(); // ルールIDごとの最終実行時刻
+    this.triggeredOnce = new Set(); // 1度だけ送信したルールID
+  }
+
+  /**
+   * StreamEventSenderを設定
+   */
+  setStreamEventSender(sender) {
+    this.streamEventSender = sender;
   }
 
   /**
@@ -19,7 +28,6 @@ class EventEngine {
    * ルールを追加
    */
   addRule(rule) {
-    // IDがなければ生成
     if (!rule.id) {
       rule.id = this._generateId();
     }
@@ -47,6 +55,7 @@ class EventEngine {
     if (index !== -1) {
       this.rules.splice(index, 1);
       this.lastTriggered.delete(id);
+      this.triggeredOnce.delete(id);
       return true;
     }
     return false;
@@ -57,6 +66,15 @@ class EventEngine {
    */
   getRules() {
     return this.rules;
+  }
+
+  /**
+   * セッションリセット（1度だけ送信のリセット）
+   */
+  resetSession() {
+    this.triggeredOnce.clear();
+    this.lastTriggered.clear();
+    console.log('[Event] セッションリセット');
   }
 
   /**
@@ -76,6 +94,11 @@ class EventEngine {
       // 無効なルールはスキップ
       if (!rule.enabled) continue;
 
+      // 1度だけ送信で既に送信済み
+      if (rule.onceOnly && this.triggeredOnce.has(rule.id)) {
+        continue;
+      }
+
       // クールダウンチェック
       if (this._isOnCooldown(rule)) {
         console.log(`[Event] ルール "${rule.name}" はクールダウン中`);
@@ -85,16 +108,18 @@ class EventEngine {
       // 条件チェック
       if (this._checkConditions(rule, message)) {
         console.log(`[Event] ルール "${rule.name}" がマッチ！`);
-        console.log(`[Event]   コメント: ${message.authorName}: ${message.message}`);
-        console.log(`[Event]   アクション: ${rule.action?.type}`);
-
         triggeredRules.push(rule);
 
-        // アクション実行
+        // アクション実行（カスタムイベント送信）
         try {
           await this._executeAction(rule, message);
           this.lastTriggered.set(rule.id, Date.now());
-          console.log(`[Event]   → アクション実行成功`);
+
+          if (rule.onceOnly) {
+            this.triggeredOnce.add(rule.id);
+          }
+
+          console.log(`[Event]   → カスタムイベント送信成功`);
         } catch (error) {
           console.error(`[Event]   → アクション実行エラー:`, error);
         }
@@ -120,100 +145,63 @@ class EventEngine {
    */
   _checkConditions(rule, message) {
     const condition = rule.condition;
-    console.log(`[Event] 条件チェック: ルール="${rule.name}", 条件=`, condition);
-    console.log(`[Event]   メッセージ="${message.message}"`);
 
-    if (!condition) {
-      console.log(`[Event]   → 条件なし、スキップ`);
+    if (!condition || !condition.type) {
       return false;
     }
 
-    // 初コメント限定チェック
-    if (condition.firstCommentOnly && !message.isFirstComment) {
-      console.log(`[Event]   → 初コメント限定で不一致`);
-      return false;
-    }
-
-    // モデレーター限定チェック
-    if (condition.moderatorOnly && !message.isModerator && !message.isOwner) {
-      console.log(`[Event]   → モデレーター限定で不一致`);
-      return false;
-    }
-
-    // 初コメントのみONかつ値が空の場合は、条件タイプチェックをスキップ（全ての初コメントにマッチ）
-    const valueRequiredTypes = ['keyword', 'command', 'regex', 'user'];
-    if (condition.firstCommentOnly && valueRequiredTypes.includes(condition.type) && !condition.value) {
-      console.log(`[Event]   → 初コメントのみ（条件値なし）でマッチ`);
-      return true;
-    }
-
-    // 条件タイプ別チェック
-    let result = false;
     switch (condition.type) {
-      case 'keyword':
-        result = this._checkKeyword(condition, message);
-        break;
+      case 'match':
+        return this._checkMatch(condition, message);
 
       case 'command':
-        result = this._checkCommand(condition, message);
-        break;
-
-      case 'regex':
-        result = this._checkRegex(condition, message);
-        break;
+        return this._checkCommand(condition, message);
 
       case 'superchat':
-        result = this._checkSuperchat(condition, message);
-        break;
+        return this._checkSuperchat(condition, message);
+
+      case 'superchatCount':
+        return this._checkSuperchatCount(condition, message);
+
+      case 'superchatTotal':
+        return this._checkSuperchatTotal(condition, message);
+
+      case 'commentCount':
+        return this._checkCommentCount(condition, message);
 
       case 'membership':
-        result = this._checkMembership(condition, message);
-        break;
-
-      case 'user':
-        result = this._checkUser(condition, message);
-        break;
+        return this._checkMembership(condition, message);
 
       default:
-        console.log(`[Event]   → 不明な条件タイプ: ${condition.type}`);
+        console.log(`[Event] 不明な条件タイプ: ${condition.type}`);
         return false;
     }
-
-    console.log(`[Event]   → チェック結果: ${result}`);
-    return result;
   }
 
   /**
-   * キーワード含有チェック
+   * テキスト一致チェック
    */
-  _checkKeyword(condition, message) {
-    console.log(`[Event] キーワードチェック: keyword="${condition.value}"`);
-
-    if (!condition.value) {
-      console.log(`[Event]   → キーワードが空`);
-      return false;
-    }
+  _checkMatch(condition, message) {
+    if (!condition.value) return false;
 
     const text = message.message || '';
-    const keyword = condition.value;
+    const value = condition.value;
+    const matchType = condition.matchType || 'contains';
 
-    console.log(`[Event]   text="${text}", keyword="${keyword}"`);
+    switch (matchType) {
+      case 'startsWith':
+        return text.startsWith(value);
 
-    let result;
-    if (condition.caseSensitive) {
-      result = condition.exactMatch
-        ? text === keyword
-        : text.includes(keyword);
-    } else {
-      const lowerText = text.toLowerCase();
-      const lowerKeyword = keyword.toLowerCase();
-      result = condition.exactMatch
-        ? lowerText === lowerKeyword
-        : lowerText.includes(lowerKeyword);
+      case 'endsWith':
+        return text.endsWith(value);
+
+      case 'exact':
+        return text === value;
+
+      case 'contains':
+      default:
+        return text.includes(value);
     }
-
-    console.log(`[Event]   → キーワードマッチ: ${result}`);
-    return result;
   }
 
   /**
@@ -230,30 +218,8 @@ class EventEngine {
       command = '!' + command;
     }
 
-    // コマンドは行頭でマッチ
-    if (condition.caseSensitive) {
-      return text === command || text.startsWith(command + ' ');
-    } else {
-      const lowerText = text.toLowerCase();
-      const lowerCommand = command.toLowerCase();
-      return lowerText === lowerCommand || lowerText.startsWith(lowerCommand + ' ');
-    }
-  }
-
-  /**
-   * 正規表現チェック
-   */
-  _checkRegex(condition, message) {
-    if (!condition.value) return false;
-
-    try {
-      const flags = condition.caseSensitive ? '' : 'i';
-      const regex = new RegExp(condition.value, flags);
-      return regex.test(message.message || '');
-    } catch (e) {
-      console.error('正規表現エラー:', e);
-      return false;
-    }
+    // コマンドは行頭でマッチ（完全一致またはスペース区切り）
+    return text === command || text.startsWith(command + ' ');
   }
 
   /**
@@ -264,7 +230,6 @@ class EventEngine {
 
     // 最低金額チェック
     if (condition.minAmount && condition.minAmount > 0) {
-      // amountMicrosは文字列で、1,000,000 = 1円
       const amountYen = parseInt(message.superchat.amountMicros) / 1000000;
       if (amountYen < condition.minAmount) {
         return false;
@@ -275,61 +240,144 @@ class EventEngine {
   }
 
   /**
-   * メンバーシップチェック
+   * メンバーシップチェック（ギフト累計閾値）
    */
   _checkMembership(condition, message) {
-    // メンバーシップ関連イベント
-    return message.newSponsor || message.membershipGift || message.isMember;
+    // ギフトまたは新規加入でなければスキップ
+    const isGift = !!message.membershipGift;
+    const isNewMember = !!message.newSponsor;
+
+    if (!isGift && !isNewMember) return false;
+
+    // 新規加入を含めない場合、ギフトのみ対象
+    const includeNewMember = condition.includeNewMember || false;
+    if (isNewMember && !includeNewMember) return false;
+
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const channelId = message.authorChannelId;
+    if (!channelId) return false;
+
+    const user = this.streamEventSender.sessionManager.getUser(channelId);
+    if (!user) return false;
+
+    const threshold = condition.giftThreshold || 10;
+
+    // 今回の増分を計算
+    let currentCount = user.giftCount;
+    if (isNewMember && includeNewMember) {
+      // 新規加入は1カウント（giftCountには含まれていないので仮想的に加算）
+      // 注: session-managerではnewSponsorはgiftCountに加算されない
+      currentCount += 1;
+    }
+
+    // ギフトの場合、既にgiftCountは更新済み（processMessage後）
+    // ちょうど閾値に達した時のみトリガー
+    return currentCount === threshold;
   }
 
   /**
-   * 特定ユーザーチェック
+   * コメント数チェック（閾値達成時）
    */
-  _checkUser(condition, message) {
-    if (!condition.value) return false;
+  _checkCommentCount(condition, message) {
+    if (!this.streamEventSender?.sessionManager) return false;
 
-    // チャンネルIDまたはユーザー名でマッチ
-    const value = condition.value.toLowerCase();
-    return message.authorChannelId === condition.value ||
-           message.authorName.toLowerCase() === value;
+    const channelId = message.authorChannelId;
+    if (!channelId) return false;
+
+    const user = this.streamEventSender.sessionManager.getUser(channelId);
+    if (!user) return false;
+
+    const threshold = condition.threshold || 10;
+
+    // ちょうど閾値に達した時のみトリガー
+    return user.messageCount === threshold;
   }
 
   /**
-   * アクションを実行
+   * スーパーチャット回数チェック（閾値達成時）
+   */
+  _checkSuperchatCount(condition, message) {
+    if (!message.superchat) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const channelId = message.authorChannelId;
+    if (!channelId) return false;
+
+    // 最低金額チェック
+    if (condition.minAmount && condition.minAmount > 0) {
+      const amountYen = parseInt(message.superchat.amountMicros) / 1000000;
+      if (amountYen < condition.minAmount) {
+        return false;
+      }
+    }
+
+    const user = this.streamEventSender.sessionManager.getUser(channelId);
+    if (!user) return false;
+
+    const threshold = condition.countThreshold || 3;
+
+    // ちょうど閾値に達した時のみトリガー
+    return user.superChatCount === threshold;
+  }
+
+  /**
+   * スーパーチャット累計金額チェック（閾値達成時）
+   */
+  _checkSuperchatTotal(condition, message) {
+    if (!message.superchat) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const channelId = message.authorChannelId;
+    if (!channelId) return false;
+
+    const user = this.streamEventSender.sessionManager.getUser(channelId);
+    if (!user) return false;
+
+    const threshold = condition.totalThreshold || 10000;
+    const previousTotal = user.superChatTotal - this._parseSuperchatAmount(message.superchat);
+
+    // 今回のスパチャで閾値を超えた場合のみトリガー（以前は未達だった）
+    return previousTotal < threshold && user.superChatTotal >= threshold;
+  }
+
+  /**
+   * スーパーチャット金額をパース
+   */
+  _parseSuperchatAmount(superchat) {
+    if (superchat.amountMicros) {
+      return Math.round(parseInt(superchat.amountMicros) / 1000000);
+    }
+    return 0;
+  }
+
+  /**
+   * アクションを実行（カスタムイベント送信のみ）
    */
   async _executeAction(rule, message) {
-    const action = rule.action;
-    if (!action) return;
+    if (!this.streamEventSender) {
+      console.warn('[Event] StreamEventSenderが設定されていません');
+      return;
+    }
 
-    // コンテキスト（変数置換用 & オーバーレイ送信用）
-    const context = {
-      // 基本情報
-      message: message.message || '',
-      user: message.authorName || '',
-      userId: message.authorChannelId || '',
-      profileImage: message.authorProfileImage || '',
+    const customEventType = rule.customEventType || 'Custom';
+    let customData = null;
 
-      // ユーザー属性
-      isOwner: message.isOwner || false,
-      isModerator: message.isModerator || false,
-      isMember: message.isMember || false,
-      isFirstComment: message.isFirstComment || false,
+    if (rule.customData) {
+      try {
+        customData = JSON.parse(rule.customData);
+      } catch (e) {
+        console.error('[Event] customDataのパースエラー:', e);
+      }
+    }
 
-      // スパチャ情報
-      amount: message.superchat?.amount || '',
-      amountValue: message.superchat ? parseInt(message.superchat.amountMicros) / 1000000 : 0,
-      currency: message.superchat?.currency || '',
-
-      // メンバーシップ情報
-      isNewSponsor: message.newSponsor || false,
-      membershipGiftCount: message.membershipGift?.count || 0,
-
-      // メタ情報
-      ruleName: rule.name || '',
-      timestamp: Date.now()
-    };
-
-    await this.obsController.executeAction(action, context);
+    await this.streamEventSender.sendCustomEvent(
+      customEventType,
+      rule.id,
+      rule.name,
+      message,
+      customData
+    );
   }
 
   /**
@@ -341,24 +389,20 @@ class EventEngine {
       name: '',
       enabled: true,
       condition: {
-        type: 'keyword',
+        type: 'match',
+        matchType: 'contains',
         value: '',
-        caseSensitive: false,
-        exactMatch: false,
         minAmount: 0,
-        firstCommentOnly: false,
-        moderatorOnly: false
+        threshold: 10,
+        countThreshold: 3,
+        totalThreshold: 10000,
+        giftThreshold: 10,
+        includeNewMember: false
       },
-      action: {
-        type: 'switchScene',
-        sceneName: '',
-        sourceName: '',
-        filterName: '',
-        text: '',
-        eventName: '',
-        duration: 3
-      },
-      cooldown: 0
+      customEventType: '',
+      customData: '',
+      cooldown: 0,
+      onceOnly: false
     };
   }
 }

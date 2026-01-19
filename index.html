@@ -12,7 +12,6 @@
     <header class="header">
       <h1>配信コメントドック</h1>
       <div class="connection-status">
-        <span id="yt-status" class="status-indicator disconnected">YT</span>
         <span id="obs-status" class="status-indicator disconnected">OBS</span>
       </div>
     </header>
@@ -27,23 +26,6 @@
     <!-- 設定タブ -->
     <section id="settings" class="tab-content active">
       <div class="section">
-        <h2>YouTube設定</h2>
-        <p class="section-note">InnerTube API使用（APIキー不要・クォータ制限なし）</p>
-        <div class="form-group">
-          <label for="proxy-url">プロキシURL (Cloudflare Workers)</label>
-          <input type="text" id="proxy-url" placeholder="https://youtube-cors-proxy.xxx.workers.dev">
-        </div>
-        <div class="form-group">
-          <label for="video-url">配信URL / 動画ID</label>
-          <input type="text" id="video-url" placeholder="https://youtube.com/watch?v=xxxxx">
-        </div>
-        <div class="button-group">
-          <button id="yt-connect" class="btn btn-primary">接続</button>
-          <button id="yt-disconnect" class="btn btn-secondary" disabled>切断</button>
-        </div>
-      </div>
-
-      <div class="section">
         <h2>OBS WebSocket設定</h2>
         <div class="form-group">
           <label for="obs-address">アドレス</label>
@@ -56,6 +38,136 @@
         <div class="button-group">
           <button id="obs-connect" class="btn btn-primary">接続</button>
           <button id="obs-disconnect" class="btn btn-secondary" disabled>切断</button>
+        </div>
+        <p class="hint">
+          ※ YouTubeチャットを受信するには「YouTube Live Chat to OBS Extension」が必要です
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>Stream Manager Event API</h2>
+        <div class="form-group">
+          <label for="event-enabled">
+            <input type="checkbox" id="event-enabled" checked>
+            イベント送信を有効化
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="event-name">イベント名</label>
+          <input type="text" id="event-name" value="StreamManager" placeholder="StreamManager">
+        </div>
+        <div class="form-group">
+          <label for="event-include-original">
+            <input type="checkbox" id="event-include-original">
+            元メッセージを含める
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>自動イベント</h2>
+        <div class="event-list">
+          <!-- 基本イベント -->
+          <div class="event-item" data-event="first-comment">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-first-comment" checked>
+                <span class="event-name">FirstComment</span>
+              </label>
+            </div>
+            <div class="event-details">初コメント検出</div>
+          </div>
+
+          <div class="event-item" data-event="super-chat">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-super-chat" checked>
+                <span class="event-name">SuperChat</span>
+              </label>
+            </div>
+            <div class="event-details">スーパーチャット受信</div>
+          </div>
+
+          <div class="event-item" data-event="membership">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-membership" checked>
+                <span class="event-name">Membership</span>
+              </label>
+            </div>
+            <div class="event-details">新規/継続メンバー</div>
+          </div>
+
+          <div class="event-item" data-event="membership-gift">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-membership-gift" checked>
+                <span class="event-name">MembershipGift</span>
+              </label>
+            </div>
+            <div class="event-details">ギフト送信</div>
+          </div>
+
+          <div class="event-item" data-event="member-milestone">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-member-milestone" checked>
+                <span class="event-name">MemberMilestone</span>
+              </label>
+            </div>
+            <div class="event-details">マイルストーンチャット</div>
+          </div>
+
+          <div class="event-item" data-event="session-stats">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-session-stats" checked>
+                <span class="event-name">SessionStats</span>
+              </label>
+            </div>
+            <div class="event-details">累計統計（5秒毎+スパチャ/ギフト時）</div>
+          </div>
+
+          <div class="event-item" data-event="forward-comments">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-forward-comments">
+                <span class="event-name">Comment</span>
+              </label>
+            </div>
+            <div class="event-details">通常コメントを転送</div>
+          </div>
+
+          <!-- ロールベースイベント -->
+          <div class="event-item" data-event="owner-comment">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-owner-comment">
+                <span class="event-name">OwnerComment</span>
+              </label>
+            </div>
+            <div class="event-details">配信者のコメント</div>
+          </div>
+
+          <div class="event-item" data-event="moderator-comment">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-moderator-comment">
+                <span class="event-name">ModeratorComment</span>
+              </label>
+            </div>
+            <div class="event-details">モデレーターのコメント</div>
+          </div>
+
+          <div class="event-item" data-event="member-comment">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-member-comment">
+                <span class="event-name">MemberComment</span>
+              </label>
+            </div>
+            <div class="event-details">メンバーのコメント</div>
+          </div>
         </div>
       </div>
 
@@ -114,83 +226,89 @@
           <fieldset class="form-group">
             <legend>条件</legend>
             <div class="form-group">
-              <label for="condition-type">条件タイプ</label>
+              <label for="condition-type">タイプ</label>
               <select id="condition-type">
-                <option value="keyword">キーワード含有</option>
+                <option value="match">テキスト一致</option>
                 <option value="command">コマンド (!xxx)</option>
-                <option value="regex">正規表現</option>
                 <option value="superchat">スーパーチャット</option>
+                <option value="commentCount">コメント数</option>
                 <option value="membership">メンバーシップ</option>
-                <option value="user">特定ユーザー</option>
+              </select>
+            </div>
+            <div class="form-group" id="superchat-mode-group" style="display:none;">
+              <div class="sub-tabs">
+                <button type="button" class="sub-tab active" data-mode="everyTime">毎回</button>
+                <button type="button" class="sub-tab" data-mode="count">回数</button>
+                <button type="button" class="sub-tab" data-mode="total">累計金額</button>
+              </div>
+              <input type="hidden" id="superchat-mode" value="everyTime">
+            </div>
+            <div class="form-group" id="condition-match-type-group">
+              <label for="condition-match-type">一致タイプ</label>
+              <select id="condition-match-type">
+                <option value="contains">含有</option>
+                <option value="startsWith">前方一致</option>
+                <option value="endsWith">後方一致</option>
+                <option value="exact">完全一致</option>
               </select>
             </div>
             <div class="form-group" id="condition-value-group">
               <label for="condition-value">値</label>
-              <input type="text" id="condition-value" placeholder="キーワードまたはパターン">
+              <input type="text" id="condition-value" placeholder="検索テキスト">
             </div>
             <div class="form-group" id="condition-amount-group" style="display:none;">
               <label for="condition-amount">最低金額 (円)</label>
               <input type="number" id="condition-amount" value="0" min="0">
             </div>
-            <div class="form-group">
-              <label for="condition-first-comment">
-                <input type="checkbox" id="condition-first-comment">
-                初コメントのみ
-              </label>
+            <div class="form-group" id="condition-threshold-group" style="display:none;">
+              <label for="condition-threshold">閾値 (回)</label>
+              <input type="number" id="condition-threshold" value="10" min="1">
             </div>
-            <div class="form-group">
-              <label for="condition-moderator">
-                <input type="checkbox" id="condition-moderator">
-                モデレーターのみ
+            <div class="form-group" id="condition-count-threshold-group" style="display:none;">
+              <label for="condition-count-threshold">回数閾値 (回)</label>
+              <input type="number" id="condition-count-threshold" value="3" min="1">
+            </div>
+            <div class="form-group" id="condition-total-threshold-group" style="display:none;">
+              <label for="condition-total-threshold">累計金額閾値 (円)</label>
+              <input type="number" id="condition-total-threshold" value="10000" min="1">
+            </div>
+            <div class="form-group" id="condition-gift-threshold-group" style="display:none;">
+              <label for="condition-gift-threshold">ギフト累計閾値 (個)</label>
+              <input type="number" id="condition-gift-threshold" value="10" min="1">
+            </div>
+            <div class="form-group" id="condition-include-new-member-group" style="display:none;">
+              <label for="condition-include-new-member">
+                <input type="checkbox" id="condition-include-new-member">
+                新規加入を含める
               </label>
             </div>
           </fieldset>
 
           <fieldset class="form-group">
-            <legend>アクション</legend>
+            <legend>カスタムイベント</legend>
             <div class="form-group">
-              <label for="action-type">アクションタイプ</label>
-              <select id="action-type">
-                <option value="switchScene">シーン切替</option>
-                <option value="showSource">ソース表示</option>
-                <option value="hideSource">ソース非表示</option>
-                <option value="toggleSource">ソース表示切替</option>
-                <option value="setText">テキスト設定</option>
-                <option value="enableFilter">フィルター有効</option>
-                <option value="disableFilter">フィルター無効</option>
-                <option value="broadcastEvent">オーバーレイへ送信</option>
-              </select>
+              <label for="custom-event-type">イベントタイプ <span class="hint">(英数字、ハイフン、アンダースコアのみ)</span></label>
+              <input type="text" id="custom-event-type" placeholder="例: Congratulation" pattern="^[a-zA-Z][a-zA-Z0-9_-]*$">
             </div>
-            <div class="form-group" id="action-scene-group">
-              <label for="action-scene">シーン名</label>
-              <input type="text" id="action-scene" placeholder="シーン名">
-            </div>
-            <div class="form-group" id="action-source-group" style="display:none;">
-              <label for="action-source">ソース名</label>
-              <input type="text" id="action-source" placeholder="ソース名">
-            </div>
-            <div class="form-group" id="action-filter-group" style="display:none;">
-              <label for="action-filter">フィルター名</label>
-              <input type="text" id="action-filter" placeholder="フィルター名">
-            </div>
-            <div class="form-group" id="action-text-group" style="display:none;">
-              <label for="action-text">テキスト (${message}, ${user} 使用可)</label>
-              <input type="text" id="action-text" placeholder="${user}: ${message}">
-            </div>
-            <div class="form-group" id="action-event-group" style="display:none;">
-              <label for="action-event">イベント名</label>
-              <input type="text" id="action-event" placeholder="superchat-alert">
-            </div>
-            <div class="form-group" id="action-duration-group" style="display:none;">
-              <label for="action-duration">表示時間 (秒, 0=手動)</label>
-              <input type="number" id="action-duration" value="3" min="0">
-            </div>
+            <details class="form-group">
+              <summary>カスタムデータ (JSON)</summary>
+              <input type="text" id="custom-data" placeholder='例: {"effect": "confetti"}'>
+            </details>
           </fieldset>
 
-          <div class="form-group">
-            <label for="rule-cooldown">クールダウン (秒)</label>
-            <input type="number" id="rule-cooldown" value="0" min="0">
-          </div>
+          <fieldset class="form-group">
+            <legend>クールダウン</legend>
+            <div class="form-group">
+              <label for="rule-cooldown">秒数</label>
+              <input type="number" id="rule-cooldown" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label for="rule-once-only">
+                <input type="checkbox" id="rule-once-only">
+                1度だけ送信（セッション中）
+              </label>
+            </div>
+          </fieldset>
         </div>
         <div class="modal-footer">
           <button id="save-rule" class="btn btn-primary">保存</button>
@@ -202,9 +320,10 @@
 
   <!-- アプリケーションスクリプト（CDN不要・全てローカル） -->
   <script src="js/storage.js"></script>
-  <script src="js/youtube-chat.js"></script>
   <script src="js/obs-websocket-client.js"></script>
   <script src="js/obs-controller.js"></script>
+  <script src="js/session-manager.js"></script>
+  <script src="js/stream-event-sender.js"></script>
   <script src="js/event-engine.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -1,7 +1,0 @@
-name = "youtube-cors-proxy"
-main = "worker.js"
-compatibility_date = "2024-01-01"
-
-# 無料プランで使用可能
-# workers.dev サブドメインが自動的に割り当てられる
-# 例: youtube-cors-proxy.your-subdomain.workers.dev

@@ -146,12 +146,6 @@ body {
   margin-bottom: 0;
 }
 
-.section-note {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-}
-
 /* フォーム */
 .form-group {
   margin-bottom: 10px;
@@ -469,4 +463,149 @@ fieldset.form-group legend {
 
 .connecting {
   animation: pulse 1s infinite;
+}
+
+/* イベントリスト */
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event-item {
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 10px;
+  border-left: 3px solid var(--accent-primary);
+}
+
+.event-item:has(input[type="checkbox"]:not(:checked)) {
+  opacity: 0.5;
+  border-left-color: var(--text-muted);
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 8px;
+}
+
+.event-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
+.event-name {
+  font-weight: 600;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--accent-primary);
+}
+
+.event-details {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  padding-left: 22px;
+}
+
+.event-config {
+  margin-top: 8px;
+  padding-left: 22px;
+}
+
+.event-config label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.event-config input {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.event-config input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* ヒントテキスト */
+.hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* サブタブ（条件タイプ内の選択肢） */
+.sub-tabs {
+  display: flex;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.sub-tab {
+  flex: 1;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sub-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.sub-tab.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* 折りたたみ（details/summary） */
+details.form-group {
+  margin-bottom: 10px;
+}
+
+details.form-group summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+details.form-group summary:hover {
+  color: var(--text-primary);
+}
+
+details.form-group[open] summary {
+  margin-bottom: 4px;
+}
+
+details.form-group input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
 }

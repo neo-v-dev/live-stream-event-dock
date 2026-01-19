@@ -11,6 +11,10 @@ class OBSController {
     // コールバック
     this.onStatusChange = null;
     this.onError = null;
+    this.onChatMessage = null;
+
+    // 初コメント判定用
+    this.commentedUsers = new Set();
   }
 
   /**
@@ -57,6 +61,22 @@ class OBSController {
 
       // シーンアイテムキャッシュをクリア
       this.sceneItemCache.clear();
+
+      // 初コメント判定をリセット
+      this.commentedUsers.clear();
+
+      // イベントハンドラ設定（YouTube Live Chat Extension対応）
+      this.obs.onEvent = (eventType, eventData) => {
+        // eventData.eventName = 'YouTubeLiveChat'
+        // eventData.eventData = { snippet: {...}, authorDetails: {...} }
+        if (eventType === 'CustomEvent' && eventData?.eventName === 'YouTubeLiveChat') {
+          const message = this._convertChatMessage(eventData.eventData);
+          if (message) {
+            console.log('[OBS] チャットメッセージ受信:', message.authorName, message.message);
+            this.onChatMessage?.(message);
+          }
+        }
+      };
 
       return true;
     } catch (error) {
@@ -351,5 +371,85 @@ class OBSController {
       default:
         console.warn('不明なアクションタイプ:', type);
     }
+  }
+
+  /**
+   * 拡張機能からのメッセージを内部形式に変換
+   */
+  _convertChatMessage(liveChatMessage) {
+    if (!liveChatMessage) return null;
+
+    const snippet = liveChatMessage.snippet || {};
+    const authorDetails = liveChatMessage.authorDetails || {};
+    const type = snippet.type || 'textMessageEvent';
+    const channelId = authorDetails.channelId || '';
+
+    // 初コメント判定
+    const isFirstComment = channelId && !this.commentedUsers.has(channelId);
+    if (channelId) {
+      this.commentedUsers.add(channelId);
+    }
+
+    // メモリリーク防止: 500件を超えたら古いものを削除
+    if (this.commentedUsers.size > 500) {
+      const usersArray = Array.from(this.commentedUsers);
+      this.commentedUsers = new Set(usersArray.slice(-250));
+    }
+
+    const message = {
+      id: liveChatMessage.id,
+      type: type,
+      authorName: authorDetails.displayName || '',
+      authorChannelId: channelId,
+      authorProfileImage: authorDetails.profileImageUrl || '',
+      message: snippet.displayMessage || '',
+      timestamp: new Date(snippet.publishedAt),
+      isOwner: authorDetails.isChatOwner || false,
+      isModerator: authorDetails.isChatModerator || false,
+      isMember: authorDetails.isChatSponsor || false,
+      isFirstComment: isFirstComment,
+      superchat: null,
+      membershipGift: null,
+      memberMilestone: null,
+      newSponsor: false
+    };
+
+    // スーパーチャット
+    if (type === 'superChatEvent' || type === 'superStickerEvent') {
+      const details = snippet.superChatDetails || snippet.superStickerDetails || {};
+      message.superchat = {
+        amount: details.amountDisplayString || '',
+        amountMicros: details.amountMicros || '0',
+        currency: details.currency || 'JPY',
+        tier: details.tier || 0
+      };
+      message.message = snippet.superChatDetails?.userComment || snippet.displayMessage || '';
+    }
+
+    // メンバーシップギフト
+    if (type === 'membershipGiftingEvent') {
+      const details = snippet.membershipGiftingDetails || {};
+      message.membershipGift = {
+        count: details.giftMembershipsCount || 0
+      };
+    }
+
+    // 新規メンバー
+    if (type === 'newSponsorEvent') {
+      message.newSponsor = true;
+    }
+
+    // メンバーマイルストーン（マイルストーンチャット）
+    if (type === 'memberMilestoneChatEvent') {
+      const details = snippet.memberMilestoneChatDetails || {};
+      message.memberMilestone = {
+        memberMonth: details.memberMonth || 0,
+        memberLevelName: details.memberLevelName || '',
+        userComment: details.userComment || ''
+      };
+      message.message = details.userComment || '';
+    }
+
+    return message;
   }
 }

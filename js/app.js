@@ -5,11 +5,15 @@ class App {
   constructor() {
     // コンポーネント初期化
     this.obsController = new OBSController();
-    this.youtubeChat = null; // APIキー設定後に初期化
-    this.eventEngine = new EventEngine(this.obsController);
+    this.sessionManager = new SessionManager();
+    this.streamEventSender = new StreamEventSender(this.obsController, this.sessionManager);
+    this.eventEngine = new EventEngine(this.obsController, this.streamEventSender);
 
     // 編集中のルール
     this.editingRuleId = null;
+
+    // セッション統計タイマー
+    this.sessionStatsTimer = null;
 
     // DOM要素
     this.elements = {};
@@ -18,6 +22,7 @@ class App {
     this._initElements();
     this._initEventListeners();
     this._loadSettings();
+    this._loadEventSettings();
     this._loadRules();
     this._updateRulesList();
   }
@@ -28,18 +33,13 @@ class App {
   _initElements() {
     this.elements = {
       // ステータス
-      ytStatus: document.getElementById('yt-status'),
       obsStatus: document.getElementById('obs-status'),
 
       // 設定
-      proxyUrl: document.getElementById('proxy-url'),
-      videoUrl: document.getElementById('video-url'),
       obsAddress: document.getElementById('obs-address'),
       obsPassword: document.getElementById('obs-password'),
 
       // ボタン
-      ytConnect: document.getElementById('yt-connect'),
-      ytDisconnect: document.getElementById('yt-disconnect'),
       obsConnect: document.getElementById('obs-connect'),
       obsDisconnect: document.getElementById('obs-disconnect'),
       saveSettings: document.getElementById('save-settings'),
@@ -56,28 +56,45 @@ class App {
       ruleName: document.getElementById('rule-name'),
       ruleEnabled: document.getElementById('rule-enabled'),
       conditionType: document.getElementById('condition-type'),
+      superchatModeGroup: document.getElementById('superchat-mode-group'),
+      superchatMode: document.getElementById('superchat-mode'),
+      conditionMatchType: document.getElementById('condition-match-type'),
+      conditionMatchTypeGroup: document.getElementById('condition-match-type-group'),
       conditionValue: document.getElementById('condition-value'),
       conditionValueGroup: document.getElementById('condition-value-group'),
       conditionAmount: document.getElementById('condition-amount'),
       conditionAmountGroup: document.getElementById('condition-amount-group'),
-      conditionFirstComment: document.getElementById('condition-first-comment'),
-      conditionModerator: document.getElementById('condition-moderator'),
-      actionType: document.getElementById('action-type'),
-      actionScene: document.getElementById('action-scene'),
-      actionSceneGroup: document.getElementById('action-scene-group'),
-      actionSource: document.getElementById('action-source'),
-      actionSourceGroup: document.getElementById('action-source-group'),
-      actionFilter: document.getElementById('action-filter'),
-      actionFilterGroup: document.getElementById('action-filter-group'),
-      actionText: document.getElementById('action-text'),
-      actionTextGroup: document.getElementById('action-text-group'),
-      actionEvent: document.getElementById('action-event'),
-      actionEventGroup: document.getElementById('action-event-group'),
-      actionDuration: document.getElementById('action-duration'),
-      actionDurationGroup: document.getElementById('action-duration-group'),
+      conditionThreshold: document.getElementById('condition-threshold'),
+      conditionThresholdGroup: document.getElementById('condition-threshold-group'),
+      conditionCountThreshold: document.getElementById('condition-count-threshold'),
+      conditionCountThresholdGroup: document.getElementById('condition-count-threshold-group'),
+      conditionTotalThreshold: document.getElementById('condition-total-threshold'),
+      conditionTotalThresholdGroup: document.getElementById('condition-total-threshold-group'),
+      conditionGiftThreshold: document.getElementById('condition-gift-threshold'),
+      conditionGiftThresholdGroup: document.getElementById('condition-gift-threshold-group'),
+      conditionIncludeNewMember: document.getElementById('condition-include-new-member'),
+      conditionIncludeNewMemberGroup: document.getElementById('condition-include-new-member-group'),
+      customEventType: document.getElementById('custom-event-type'),
+      customData: document.getElementById('custom-data'),
       ruleCooldown: document.getElementById('rule-cooldown'),
+      ruleOnceOnly: document.getElementById('rule-once-only'),
       saveRule: document.getElementById('save-rule'),
-      cancelRule: document.getElementById('cancel-rule')
+      cancelRule: document.getElementById('cancel-rule'),
+
+      // イベント設定
+      eventEnabled: document.getElementById('event-enabled'),
+      eventName: document.getElementById('event-name'),
+      eventIncludeOriginal: document.getElementById('event-include-original'),
+      eventFirstComment: document.getElementById('event-first-comment'),
+      eventSuperChat: document.getElementById('event-super-chat'),
+      eventMembership: document.getElementById('event-membership'),
+      eventMembershipGift: document.getElementById('event-membership-gift'),
+      eventMemberMilestone: document.getElementById('event-member-milestone'),
+      eventSessionStats: document.getElementById('event-session-stats'),
+      eventForwardComments: document.getElementById('event-forward-comments'),
+      eventOwnerComment: document.getElementById('event-owner-comment'),
+      eventModeratorComment: document.getElementById('event-moderator-comment'),
+      eventMemberComment: document.getElementById('event-member-comment')
     };
   }
 
@@ -89,10 +106,6 @@ class App {
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => this._switchTab(tab.dataset.tab));
     });
-
-    // YouTube接続
-    this.elements.ytConnect.addEventListener('click', () => this._connectYouTube());
-    this.elements.ytDisconnect.addEventListener('click', () => this._disconnectYouTube());
 
     // OBS接続
     this.elements.obsConnect.addEventListener('click', () => this._connectOBS());
@@ -115,8 +128,13 @@ class App {
     // 条件タイプ変更時のUI更新
     this.elements.conditionType.addEventListener('change', () => this._updateConditionUI());
 
-    // アクションタイプ変更時のUI更新
-    this.elements.actionType.addEventListener('change', () => this._updateActionUI());
+    // スーパーチャットモードタブ切り替え
+    document.querySelectorAll('.sub-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const mode = e.target.dataset.mode;
+        this._setSuperchatMode(mode);
+      });
+    });
 
     // モーダル外クリックで閉じる
     this.elements.ruleModal.addEventListener('click', (e) => {
@@ -130,6 +148,11 @@ class App {
       this._updateStatusIndicator(this.elements.obsStatus, status);
       this.elements.obsConnect.disabled = status === 'connected' || status === 'connecting';
       this.elements.obsDisconnect.disabled = status !== 'connected';
+    };
+
+    // OBSからのチャットメッセージ受信（YouTube Live Chat Extension経由）
+    this.obsController.onChatMessage = (message) => {
+      this._onChatMessage(message);
     };
   }
 
@@ -157,15 +180,8 @@ class App {
    */
   _loadSettings() {
     const settings = storage.loadSettings();
-    this.elements.proxyUrl.value = settings.proxyUrl || '';
-    this.elements.videoUrl.value = settings.videoUrl || '';
     this.elements.obsAddress.value = settings.obsAddress || 'ws://localhost:4455';
     this.elements.obsPassword.value = settings.obsPassword || '';
-
-    // プロキシURLを設定
-    if (settings.proxyUrl) {
-      YouTubeChatCollector.setProxyUrl(settings.proxyUrl);
-    }
   }
 
   /**
@@ -173,17 +189,68 @@ class App {
    */
   _saveSettings() {
     const settings = {
-      proxyUrl: this.elements.proxyUrl.value,
-      videoUrl: this.elements.videoUrl.value,
       obsAddress: this.elements.obsAddress.value,
       obsPassword: this.elements.obsPassword.value
     };
     storage.saveSettings(settings);
 
-    // プロキシURLを更新
-    YouTubeChatCollector.setProxyUrl(settings.proxyUrl);
+    // イベント設定も保存
+    this._saveEventSettings();
 
     this._showToast('設定を保存しました');
+  }
+
+  /**
+   * イベント設定を読み込み
+   */
+  _loadEventSettings() {
+    const eventSettings = storage.loadEventSettings();
+
+    // UI要素に反映
+    this.elements.eventEnabled.checked = eventSettings.enabled !== false;
+    this.elements.eventName.value = eventSettings.eventName || 'StreamManager';
+    this.elements.eventIncludeOriginal.checked = eventSettings.includeOriginal || false;
+
+    this.elements.eventFirstComment.checked = eventSettings.firstComment?.enabled !== false;
+    this.elements.eventSuperChat.checked = eventSettings.superChat?.enabled !== false;
+    this.elements.eventMembership.checked = eventSettings.membership?.enabled !== false;
+    this.elements.eventMembershipGift.checked = eventSettings.membershipGift?.enabled !== false;
+    this.elements.eventMemberMilestone.checked = eventSettings.memberMilestone?.enabled !== false;
+    this.elements.eventSessionStats.checked = eventSettings.sessionStats?.enabled !== false;
+    this.elements.eventForwardComments.checked = eventSettings.forwardComments?.enabled || false;
+
+    this.elements.eventOwnerComment.checked = eventSettings.ownerComment?.enabled || false;
+    this.elements.eventModeratorComment.checked = eventSettings.moderatorComment?.enabled || false;
+    this.elements.eventMemberComment.checked = eventSettings.memberComment?.enabled || false;
+
+    // StreamEventSenderに設定を適用
+    this.streamEventSender.applySettings(eventSettings);
+  }
+
+  /**
+   * イベント設定を保存
+   */
+  _saveEventSettings() {
+    const eventSettings = {
+      enabled: this.elements.eventEnabled.checked,
+      eventName: this.elements.eventName.value.trim() || 'StreamManager',
+      includeOriginal: this.elements.eventIncludeOriginal.checked,
+
+      forwardComments: { enabled: this.elements.eventForwardComments.checked },
+      firstComment: { enabled: this.elements.eventFirstComment.checked },
+      superChat: { enabled: this.elements.eventSuperChat.checked },
+      membership: { enabled: this.elements.eventMembership.checked },
+      membershipGift: { enabled: this.elements.eventMembershipGift.checked },
+      memberMilestone: { enabled: this.elements.eventMemberMilestone.checked },
+      sessionStats: { enabled: this.elements.eventSessionStats.checked },
+
+      ownerComment: { enabled: this.elements.eventOwnerComment.checked },
+      moderatorComment: { enabled: this.elements.eventModeratorComment.checked },
+      memberComment: { enabled: this.elements.eventMemberComment.checked }
+    };
+
+    storage.saveEventSettings(eventSettings);
+    this.streamEventSender.applySettings(eventSettings);
   }
 
   /**
@@ -202,62 +269,6 @@ class App {
   }
 
   /**
-   * YouTube接続
-   */
-  async _connectYouTube() {
-    const proxyUrl = this.elements.proxyUrl.value.trim();
-    const videoUrl = this.elements.videoUrl.value.trim();
-
-    if (!proxyUrl) {
-      this._showToast('プロキシURLを入力してください', 'error');
-      return;
-    }
-
-    if (!videoUrl) {
-      this._showToast('配信URLを入力してください', 'error');
-      return;
-    }
-
-    // プロキシURLを設定
-    YouTubeChatCollector.setProxyUrl(proxyUrl);
-
-    // YouTubeChatCollectorを初期化（InnerTube API使用、APIキー不要）
-    this.youtubeChat = new YouTubeChatCollector();
-
-    // コールバック設定
-    this.youtubeChat.onStatusChange = (status) => {
-      this._updateStatusIndicator(this.elements.ytStatus, status);
-      this.elements.ytConnect.disabled = status === 'connected' || status === 'connecting';
-      this.elements.ytDisconnect.disabled = status !== 'connected';
-    };
-
-    this.youtubeChat.onMessage = (message) => {
-      this._onChatMessage(message);
-    };
-
-    this.youtubeChat.onError = (error) => {
-      this._showToast(`YouTube: ${error.message}`, 'error');
-    };
-
-    try {
-      await this.youtubeChat.connect(videoUrl);
-      this._showToast('YouTubeに接続しました');
-    } catch (error) {
-      this._showToast(`接続エラー: ${error.message}`, 'error');
-    }
-  }
-
-  /**
-   * YouTube切断
-   */
-  async _disconnectYouTube() {
-    if (this.youtubeChat) {
-      await this.youtubeChat.disconnect();
-      this._showToast('YouTubeから切断しました');
-    }
-  }
-
-  /**
    * OBS接続
    */
   async _connectOBS() {
@@ -267,6 +278,9 @@ class App {
     try {
       await this.obsController.connect(address, password);
       this._showToast('OBSに接続しました');
+
+      // セッション統計タイマー開始（5秒毎）
+      this._startSessionStatsTimer();
     } catch (error) {
       this._showToast(`OBS接続エラー: ${error.message}`, 'error');
     }
@@ -276,8 +290,37 @@ class App {
    * OBS切断
    */
   async _disconnectOBS() {
+    // セッション統計タイマー停止
+    this._stopSessionStatsTimer();
+
     await this.obsController.disconnect();
     this._showToast('OBSから切断しました');
+  }
+
+  /**
+   * セッション統計タイマー開始
+   */
+  _startSessionStatsTimer() {
+    this._stopSessionStatsTimer();
+
+    this.sessionStatsTimer = setInterval(() => {
+      if (this.obsController.connected) {
+        this.streamEventSender.sendSessionStats();
+      }
+    }, 5000);
+
+    console.log('[App] セッション統計タイマー開始（5秒毎）');
+  }
+
+  /**
+   * セッション統計タイマー停止
+   */
+  _stopSessionStatsTimer() {
+    if (this.sessionStatsTimer) {
+      clearInterval(this.sessionStatsTimer);
+      this.sessionStatsTimer = null;
+      console.log('[App] セッション統計タイマー停止');
+    }
   }
 
   /**
@@ -286,20 +329,23 @@ class App {
   async _onChatMessage(message) {
     // コンソールログ
     if (message.superchat) {
-      console.log(`[YT] スパチャ: ${message.authorName} ${message.superchat.amount} "${message.message}"`);
+      console.log(`[Chat] スパチャ: ${message.authorName} ${message.superchat.amount} "${message.message}"`);
     } else if (message.newSponsor) {
-      console.log(`[YT] 新規メンバー: ${message.authorName}`);
+      console.log(`[Chat] 新規メンバー: ${message.authorName}`);
     } else {
-      console.log(`[YT] コメント: ${message.authorName}: ${message.message}`);
+      console.log(`[Chat] コメント: ${message.authorName}: ${message.message}`);
     }
 
     // ログに追加
     this._addCommentLog(message);
 
-    // イベントエンジンで処理
+    // Stream Manager Eventを送信（初コメ、スパチャ累計、コマンド等）
+    await this.streamEventSender.processAndSend(message);
+
+    // イベントエンジンで処理（ルールベースのアクション + パターンマッチイベント送信）
     const triggered = await this.eventEngine.processMessage(message);
     if (triggered.length > 0) {
-      console.log(`[YT] ${triggered.length}件のルールがトリガーされました`);
+      console.log(`[Rule] ${triggered.length}件のルールがトリガーされました`);
     }
   }
 
@@ -372,7 +418,6 @@ class App {
     }
 
     this._updateConditionUI();
-    this._updateActionUI();
     this.elements.ruleModal.classList.remove('hidden');
   }
 
@@ -393,23 +438,37 @@ class App {
 
     // 条件
     const condition = rule.condition || {};
-    this.elements.conditionType.value = condition.type || 'keyword';
+    let conditionType = condition.type || 'match';
+    let superchatMode = 'everyTime';
+
+    // スーパーチャット系の条件タイプを統合して処理
+    if (['superchat', 'superchatCount', 'superchatTotal'].includes(conditionType)) {
+      if (conditionType === 'superchatCount') {
+        superchatMode = 'count';
+      } else if (conditionType === 'superchatTotal') {
+        superchatMode = 'total';
+      }
+      conditionType = 'superchat';
+    }
+
+    this.elements.conditionType.value = conditionType;
+    this._setSuperchatMode(superchatMode);
+    this.elements.conditionMatchType.value = condition.matchType || 'contains';
     this.elements.conditionValue.value = condition.value || '';
     this.elements.conditionAmount.value = condition.minAmount || 0;
-    this.elements.conditionFirstComment.checked = condition.firstCommentOnly || false;
-    this.elements.conditionModerator.checked = condition.moderatorOnly || false;
+    this.elements.conditionThreshold.value = condition.threshold || 10;
+    this.elements.conditionCountThreshold.value = condition.countThreshold || 3;
+    this.elements.conditionTotalThreshold.value = condition.totalThreshold || 10000;
+    this.elements.conditionGiftThreshold.value = condition.giftThreshold || 10;
+    this.elements.conditionIncludeNewMember.checked = condition.includeNewMember || false;
 
-    // アクション
-    const action = rule.action || {};
-    this.elements.actionType.value = action.type || 'switchScene';
-    this.elements.actionScene.value = action.sceneName || '';
-    this.elements.actionSource.value = action.sourceName || '';
-    this.elements.actionFilter.value = action.filterName || '';
-    this.elements.actionText.value = action.text || '';
-    this.elements.actionEvent.value = action.eventName || '';
-    this.elements.actionDuration.value = action.duration || 3;
+    // カスタムイベント
+    this.elements.customEventType.value = rule.customEventType || '';
+    this.elements.customData.value = rule.customData || '';
 
+    // クールダウン
     this.elements.ruleCooldown.value = rule.cooldown || 0;
+    this.elements.ruleOnceOnly.checked = rule.onceOnly || false;
   }
 
   /**
@@ -417,100 +476,100 @@ class App {
    */
   _updateConditionUI() {
     const type = this.elements.conditionType.value;
+    const superchatMode = this.elements.superchatMode.value;
 
-    // 値入力の表示/非表示
-    const showValue = ['keyword', 'command', 'regex', 'user'].includes(type);
+    // 一致タイプの表示/非表示（match時のみ表示）
+    const showMatchType = type === 'match';
+    this.elements.conditionMatchTypeGroup.style.display = showMatchType ? 'block' : 'none';
+
+    // 値入力の表示/非表示（match, command時のみ）
+    const showValue = ['match', 'command'].includes(type);
     this.elements.conditionValueGroup.style.display = showValue ? 'block' : 'none';
 
-    // 金額入力の表示/非表示
-    const showAmount = type === 'superchat';
+    // スーパーチャットモードタブの表示/非表示
+    const showSuperchatMode = type === 'superchat';
+    this.elements.superchatModeGroup.style.display = showSuperchatMode ? 'block' : 'none';
+
+    // 金額入力の表示/非表示（superchat時、everyTimeまたはcount）
+    const showAmount = type === 'superchat' && ['everyTime', 'count'].includes(superchatMode);
     this.elements.conditionAmountGroup.style.display = showAmount ? 'block' : 'none';
+
+    // 閾値入力の表示/非表示（commentCount時のみ）
+    const showThreshold = type === 'commentCount';
+    this.elements.conditionThresholdGroup.style.display = showThreshold ? 'block' : 'none';
+
+    // 回数閾値の表示/非表示（superchat時、count）
+    const showCountThreshold = type === 'superchat' && superchatMode === 'count';
+    this.elements.conditionCountThresholdGroup.style.display = showCountThreshold ? 'block' : 'none';
+
+    // 累計金額閾値の表示/非表示（superchat時、total）
+    const showTotalThreshold = type === 'superchat' && superchatMode === 'total';
+    this.elements.conditionTotalThresholdGroup.style.display = showTotalThreshold ? 'block' : 'none';
+
+    // ギフト閾値の表示/非表示（membership時のみ）
+    const showGiftThreshold = type === 'membership';
+    this.elements.conditionGiftThresholdGroup.style.display = showGiftThreshold ? 'block' : 'none';
+    this.elements.conditionIncludeNewMemberGroup.style.display = showGiftThreshold ? 'block' : 'none';
 
     // プレースホルダー更新
     const placeholders = {
-      keyword: 'キーワード',
-      command: '!コマンド名',
-      regex: '正規表現パターン',
-      user: 'ユーザー名またはチャンネルID'
+      match: '検索テキスト',
+      command: 'コマンド名'
     };
     this.elements.conditionValue.placeholder = placeholders[type] || '';
   }
 
   /**
-   * アクションUI更新
+   * スーパーチャットモードを設定
    */
-  _updateActionUI() {
-    const type = this.elements.actionType.value;
+  _setSuperchatMode(mode) {
+    this.elements.superchatMode.value = mode;
 
-    // 全て非表示にしてから必要なものだけ表示
-    this.elements.actionSceneGroup.style.display = 'none';
-    this.elements.actionSourceGroup.style.display = 'none';
-    this.elements.actionFilterGroup.style.display = 'none';
-    this.elements.actionTextGroup.style.display = 'none';
-    this.elements.actionEventGroup.style.display = 'none';
-    this.elements.actionDurationGroup.style.display = 'none';
+    // タブのアクティブ状態を更新
+    document.querySelectorAll('.sub-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
 
-    switch (type) {
-      case 'switchScene':
-        this.elements.actionSceneGroup.style.display = 'block';
-        break;
-
-      case 'showSource':
-        this.elements.actionSceneGroup.style.display = 'block';
-        this.elements.actionSourceGroup.style.display = 'block';
-        this.elements.actionDurationGroup.style.display = 'block';
-        break;
-
-      case 'hideSource':
-      case 'toggleSource':
-        this.elements.actionSceneGroup.style.display = 'block';
-        this.elements.actionSourceGroup.style.display = 'block';
-        break;
-
-      case 'setText':
-        this.elements.actionSourceGroup.style.display = 'block';
-        this.elements.actionTextGroup.style.display = 'block';
-        break;
-
-      case 'enableFilter':
-      case 'disableFilter':
-        this.elements.actionSourceGroup.style.display = 'block';
-        this.elements.actionFilterGroup.style.display = 'block';
-        break;
-
-      case 'broadcastEvent':
-        this.elements.actionEventGroup.style.display = 'block';
-        break;
-    }
+    // UIを更新（表示フィールドの切り替え）
+    this._updateConditionUI();
   }
 
   /**
    * ルールを保存
    */
   _saveRule() {
+    let conditionType = this.elements.conditionType.value;
+
+    // スーパーチャットの場合、モードに応じて実際の条件タイプを決定
+    if (conditionType === 'superchat') {
+      const superchatMode = this.elements.superchatMode.value;
+      if (superchatMode === 'count') {
+        conditionType = 'superchatCount';
+      } else if (superchatMode === 'total') {
+        conditionType = 'superchatTotal';
+      }
+      // everyTimeの場合は'superchat'のまま
+    }
+
     const rule = {
       id: this.editingRuleId,
       name: this.elements.ruleName.value.trim(),
       enabled: this.elements.ruleEnabled.checked,
       condition: {
-        type: this.elements.conditionType.value,
+        type: conditionType,
+        matchType: this.elements.conditionMatchType.value,
         value: this.elements.conditionValue.value.trim(),
         minAmount: parseInt(this.elements.conditionAmount.value) || 0,
-        firstCommentOnly: this.elements.conditionFirstComment.checked,
-        moderatorOnly: this.elements.conditionModerator.checked,
-        caseSensitive: false,
-        exactMatch: false
+        threshold: parseInt(this.elements.conditionThreshold.value) || 10,
+        countThreshold: parseInt(this.elements.conditionCountThreshold.value) || 3,
+        totalThreshold: parseInt(this.elements.conditionTotalThreshold.value) || 10000,
+        giftThreshold: parseInt(this.elements.conditionGiftThreshold.value) || 1,
+        includeNewMember: this.elements.conditionIncludeNewMember.checked
       },
-      action: {
-        type: this.elements.actionType.value,
-        sceneName: this.elements.actionScene.value.trim(),
-        sourceName: this.elements.actionSource.value.trim(),
-        filterName: this.elements.actionFilter.value.trim(),
-        text: this.elements.actionText.value,
-        eventName: this.elements.actionEvent.value.trim(),
-        duration: parseInt(this.elements.actionDuration.value) || 0
-      },
-      cooldown: parseInt(this.elements.ruleCooldown.value) || 0
+      customEventType: this.elements.customEventType.value.trim(),
+      customData: this.elements.customData.value.trim(),
+      cooldown: parseInt(this.elements.ruleCooldown.value) || 0,
+      onceOnly: this.elements.ruleOnceOnly.checked
     };
 
     // バリデーション: ルール名
@@ -519,34 +578,33 @@ class App {
       return;
     }
 
-    // バリデーション: 条件の値（初コメントのみONの場合は値なしでもOK）
-    const conditionNeedsValue = ['keyword', 'command', 'regex', 'user'];
-    if (conditionNeedsValue.includes(rule.condition.type) && !rule.condition.value && !rule.condition.firstCommentOnly) {
+    // バリデーション: 条件の値（match, command時は必須）
+    if (['match', 'command'].includes(conditionType) && !rule.condition.value) {
       this._showToast('条件の値を入力してください', 'error');
       return;
     }
 
-    // バリデーション: アクション
-    const actionType = rule.action.type;
-    if (actionType === 'switchScene' && !rule.action.sceneName) {
-      this._showToast('シーン名を入力してください', 'error');
+    // バリデーション: カスタムイベントタイプ（必須）
+    if (!rule.customEventType) {
+      this._showToast('イベントタイプを入力してください', 'error');
       return;
     }
-    if (['showSource', 'hideSource', 'toggleSource'].includes(actionType) && !rule.action.sourceName) {
-      this._showToast('ソース名を入力してください', 'error');
+
+    // バリデーション: イベントタイプの文字種（英字で始まり、英数字・ハイフン・アンダースコアのみ）
+    const eventTypePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+    if (!eventTypePattern.test(rule.customEventType)) {
+      this._showToast('イベントタイプは英字で始まり、英数字・ハイフン・アンダースコアのみ使用可能です', 'error');
       return;
     }
-    if (actionType === 'setText' && !rule.action.sourceName) {
-      this._showToast('テキストソース名を入力してください', 'error');
-      return;
-    }
-    if (['enableFilter', 'disableFilter'].includes(actionType) && (!rule.action.sourceName || !rule.action.filterName)) {
-      this._showToast('ソース名とフィルター名を入力してください', 'error');
-      return;
-    }
-    if (actionType === 'broadcastEvent' && !rule.action.eventName) {
-      this._showToast('イベント名を入力してください', 'error');
-      return;
+
+    // カスタムデータのJSON検証
+    if (rule.customData) {
+      try {
+        JSON.parse(rule.customData);
+      } catch (e) {
+        this._showToast('カスタムデータは有効なJSON形式で入力してください', 'error');
+        return;
+      }
     }
 
     if (this.editingRuleId) {
@@ -584,7 +642,7 @@ class App {
         </div>
         <div class="rule-details">
           <div class="rule-condition">条件: ${this._formatCondition(rule.condition)}</div>
-          <div class="rule-action">アクション: ${this._formatAction(rule.action)}</div>
+          <div class="rule-action">イベント: ${this._escapeHtml(rule.customEventType || '未設定')}</div>
         </div>
       </div>
     `).join('');
@@ -624,15 +682,28 @@ class App {
     if (!condition) return '未設定';
 
     const typeLabels = {
-      keyword: 'キーワード',
+      match: 'テキスト',
       command: 'コマンド',
-      regex: '正規表現',
-      superchat: 'スーパーチャット',
-      membership: 'メンバーシップ',
-      user: 'ユーザー'
+      superchat: 'スパチャ（毎回）',
+      superchatCount: 'スパチャ（回数）',
+      superchatTotal: 'スパチャ（累計）',
+      commentCount: 'コメント数',
+      membership: 'メンバーシップ'
+    };
+
+    const matchTypeLabels = {
+      contains: '含有',
+      startsWith: '前方一致',
+      endsWith: '後方一致',
+      exact: '完全一致'
     };
 
     let text = typeLabels[condition.type] || condition.type;
+
+    // match時は一致タイプも表示
+    if (condition.type === 'match' && condition.matchType) {
+      text += `(${matchTypeLabels[condition.matchType] || condition.matchType})`;
+    }
 
     if (condition.value) {
       text += ` "${condition.value}"`;
@@ -642,46 +713,28 @@ class App {
       text += ` (¥${condition.minAmount}以上)`;
     }
 
-    if (condition.firstCommentOnly) {
-      text += ' [初コメ]';
+    if (condition.type === 'superchatCount') {
+      let detail = `${condition.countThreshold || 3}回目`;
+      if (condition.minAmount > 0) {
+        detail += ` ¥${condition.minAmount}以上`;
+      }
+      text += ` (${detail})`;
     }
 
-    if (condition.moderatorOnly) {
-      text += ' [モデレーターのみ]';
+    if (condition.type === 'superchatTotal') {
+      text += ` (¥${condition.totalThreshold || 10000}達成)`;
     }
 
-    return text;
-  }
-
-  /**
-   * アクションをフォーマット
-   */
-  _formatAction(action) {
-    if (!action) return '未設定';
-
-    const typeLabels = {
-      switchScene: 'シーン切替',
-      showSource: 'ソース表示',
-      hideSource: 'ソース非表示',
-      toggleSource: 'ソース切替',
-      setText: 'テキスト設定',
-      enableFilter: 'フィルター有効',
-      disableFilter: 'フィルター無効',
-      broadcastEvent: 'オーバーレイ送信'
-    };
-
-    let text = typeLabels[action.type] || action.type;
-
-    if (action.sceneName) {
-      text += ` → "${action.sceneName}"`;
+    if (condition.type === 'commentCount' && condition.threshold > 0) {
+      text += ` (${condition.threshold}回達成)`;
     }
 
-    if (action.sourceName) {
-      text += ` [${action.sourceName}]`;
-    }
-
-    if (action.type === 'showSource' && action.duration > 0) {
-      text += ` (${action.duration}秒)`;
+    if (condition.type === 'membership') {
+      let detail = `${condition.giftThreshold || 10}個`;
+      if (condition.includeNewMember) {
+        detail += ' +新規加入';
+      }
+      text += ` (${detail})`;
     }
 
     return text;
