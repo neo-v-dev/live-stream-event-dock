@@ -208,7 +208,7 @@ class App {
 
     // UI要素に反映
     this.elements.eventEnabled.checked = eventSettings.enabled !== false;
-    this.elements.eventName.value = eventSettings.eventName || 'StreamManager';
+    this.elements.eventName.value = eventSettings.eventName || 'LiveStreamEvent';
     this.elements.eventIncludeOriginal.checked = eventSettings.includeOriginal || false;
 
     this.elements.eventFirstComment.checked = eventSettings.firstComment?.enabled !== false;
@@ -233,7 +233,7 @@ class App {
   _saveEventSettings() {
     const eventSettings = {
       enabled: this.elements.eventEnabled.checked,
-      eventName: this.elements.eventName.value.trim() || 'StreamManager',
+      eventName: this.elements.eventName.value.trim() || 'LiveStreamEvent',
       includeOriginal: this.elements.eventIncludeOriginal.checked,
 
       forwardComments: { enabled: this.elements.eventForwardComments.checked },

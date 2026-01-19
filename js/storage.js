@@ -126,7 +126,7 @@ class Storage {
     return {
       // 全体設定
       enabled: true,
-      eventName: 'StreamManager',
+      eventName: 'LiveStreamEvent',
       includeOriginal: false,
 
       // 通常コメント転送

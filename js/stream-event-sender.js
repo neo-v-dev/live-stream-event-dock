@@ -1,5 +1,5 @@
 /**
- * StreamEventSender - Stream Manager Event APIでイベントを送信
+ * StreamEventSender - Live Stream Event APIでイベントを送信
  */
 class StreamEventSender {
   /**
@@ -12,7 +12,7 @@ class StreamEventSender {
 
     // 設定
     this.config = {
-      eventName: 'StreamManager',
+      eventName: 'LiveStreamEvent',
       includeOriginal: false,
       enabled: true
     };
@@ -24,7 +24,7 @@ class StreamEventSender {
   applySettings(eventSettings) {
     // 全体設定を適用
     this.config.enabled = eventSettings.enabled !== false;
-    this.config.eventName = eventSettings.eventName || 'StreamManager';
+    this.config.eventName = eventSettings.eventName || 'LiveStreamEvent';
     this.config.includeOriginal = eventSettings.includeOriginal || false;
 
     // SessionManagerにも設定を渡す
