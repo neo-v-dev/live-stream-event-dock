@@ -1,5 +1,8 @@
 MIT License + Commons Clause License Condition v1.0
 
+Note: This license applies to all versions of this software, including
+all prior commits in this repository.
+
 Software: Stream Comment Dock
 
 License: MIT
@@ -46,5 +49,8 @@ rights granted to you under the License to provide to third parties, for a
 fee or other consideration (including without limitation fees for hosting or
 consulting/ support services related to the Software), a product or service
 whose value derives, entirely or substantially, from the functionality of the
-Software. Any license notice or attribution required by the License must also
+Software. This restriction applies to the Software in its original form as
+well as any modified, derivative, or adapted versions thereof.
+
+Any license notice or attribution required by the License must also
 include this Commons Clause License Condition notice.
