@@ -12,6 +12,27 @@ class App {
     // 編集中のルール
     this.editingRuleId = null;
 
+    // liveChatId変更検出の状態管理
+    this.pendingLiveChatId = null;
+    this.liveChatIdDialogOpen = false;
+    this.liveChatIdWarningShown = false;  // 警告メッセージ表示フラグ
+
+    // liveChatId変更時のコールバックを設定
+    this.sessionManager.onLiveChatIdChange = (previous, current) => {
+      this._onLiveChatIdChange(previous, current);
+    };
+
+    // ユーザーリスト状態
+    this.usersListState = {
+      offset: 0,
+      limit: 50,
+      total: 0,
+      sortBy: 'lastSeenAt',
+      filter: '',
+      debounceTimer: null,
+      selectedUsers: new Set()  // 選択されたユーザーのchannelId
+    };
+
     // セッション統計タイマー
     this.sessionStatsTimer = null;
 
@@ -51,7 +72,6 @@ class App {
       // ボタン
       obsConnect: document.getElementById('obs-connect'),
       obsDisconnect: document.getElementById('obs-disconnect'),
-      saveSettings: document.getElementById('save-settings'),
       addRule: document.getElementById('add-rule'),
       clearLog: document.getElementById('clear-log'),
       resetSession: document.getElementById('reset-session'),
@@ -132,8 +152,27 @@ class App {
       eventModeratorComment: document.getElementById('event-moderator-comment'),
       eventMemberComment: document.getElementById('event-member-comment'),
 
+      // ユーザータブ
+      usersList: document.getElementById('users-list'),
+      usersCount: document.getElementById('users-count'),
+      usersFilter: document.getElementById('users-filter'),
+      usersSort: document.getElementById('users-sort'),
+      usersLoadMore: document.getElementById('users-load-more'),
+      loadMoreUsersBtn: document.getElementById('load-more-users'),
+      usersSelectAll: document.getElementById('users-select-all'),
+      deleteSelectedUsers: document.getElementById('delete-selected-users'),
+      deleteAllUsers: document.getElementById('delete-all-users'),
+
       // エクスポート/インポート
       exportData: document.getElementById('export-data'),
+      exportModal: document.getElementById('export-modal'),
+      exportModalClose: document.getElementById('export-modal-close'),
+      exportRules: document.getElementById('export-rules'),
+      exportSettings: document.getElementById('export-settings'),
+      exportSession: document.getElementById('export-session'),
+      exportGlobalViewers: document.getElementById('export-global-viewers'),
+      exportConfirm: document.getElementById('export-confirm'),
+      exportCancel: document.getElementById('export-cancel'),
       importData: document.getElementById('import-data'),
       importFile: document.getElementById('import-file'),
       importModal: document.getElementById('import-modal'),
@@ -142,6 +181,7 @@ class App {
       importRules: document.getElementById('import-rules'),
       importSettings: document.getElementById('import-settings'),
       importSession: document.getElementById('import-session'),
+      importGlobalViewers: document.getElementById('import-global-viewers'),
       importConfirm: document.getElementById('import-confirm'),
       importCancel: document.getElementById('import-cancel')
     };
@@ -160,8 +200,9 @@ class App {
     this.elements.obsConnect.addEventListener('click', () => this._connectOBS());
     this.elements.obsDisconnect.addEventListener('click', () => this._disconnectOBS());
 
-    // 設定保存
-    this.elements.saveSettings.addEventListener('click', () => this._saveSettings());
+    // OBS接続設定の即時保存
+    this.elements.obsAddress.addEventListener('change', () => this._saveOBSSettings());
+    this.elements.obsPassword.addEventListener('change', () => this._saveOBSSettings());
 
     // ルール追加
     this.elements.addRule.addEventListener('click', () => this._openRuleModal());
@@ -173,7 +214,13 @@ class App {
     this.elements.resetSession?.addEventListener('click', () => this._resetSession());
 
     // エクスポート/インポート
-    this.elements.exportData?.addEventListener('click', () => this._exportData());
+    this.elements.exportData?.addEventListener('click', () => this._openExportModal());
+    this.elements.exportModalClose?.addEventListener('click', () => this._closeExportModal());
+    this.elements.exportCancel?.addEventListener('click', () => this._closeExportModal());
+    this.elements.exportConfirm?.addEventListener('click', () => this._confirmExport());
+    this.elements.exportModal?.addEventListener('click', (e) => {
+      if (e.target === this.elements.exportModal) this._closeExportModal();
+    });
     this.elements.importData?.addEventListener('click', () => this.elements.importFile.click());
     this.elements.importFile?.addEventListener('change', (e) => this._handleImportFile(e));
     this.elements.importModalClose?.addEventListener('click', () => this._closeImportModal());
@@ -196,6 +243,19 @@ class App {
 
     // スーパーチャットテキスト判定チェックボックス変更時
     this.elements.superchatTextMatch.addEventListener('change', () => this._updateSuperchatTextMatchUI());
+
+    // 自動イベント設定の即時保存
+    const eventCheckboxes = [
+      'eventEnabled', 'eventIncludeOriginal', 'eventForwardComments',
+      'eventFirstComment', 'eventNewViewer', 'eventSuperChat',
+      'eventMembership', 'eventMembershipGift', 'eventMemberMilestone',
+      'eventSessionStats', 'eventModeratorComment', 'eventOwnerComment', 'eventMemberComment'
+    ];
+    eventCheckboxes.forEach(name => {
+      this.elements[name]?.addEventListener('change', () => this._saveEventSettings());
+    });
+    // イベント名の変更も即時保存
+    this.elements.eventName?.addEventListener('change', () => this._saveEventSettings());
 
     // パターン追加ボタン
     this.elements.addPatternBtn.addEventListener('click', () => this._addPattern('condition'));
@@ -232,6 +292,43 @@ class App {
     this.obsController.onStatsUpdate = (stats) => {
       this._onStatsUpdate(stats);
     };
+
+    // ユーザータブのイベントリスナー
+    this.elements.usersSort?.addEventListener('change', () => {
+      this.usersListState.sortBy = this.elements.usersSort.value;
+      this.usersListState.offset = 0;
+      this._loadUsersList();
+    });
+
+    this.elements.usersFilter?.addEventListener('input', () => {
+      // デバウンス処理
+      if (this.usersListState.debounceTimer) {
+        clearTimeout(this.usersListState.debounceTimer);
+      }
+      this.usersListState.debounceTimer = setTimeout(() => {
+        this.usersListState.filter = this.elements.usersFilter.value.trim();
+        this.usersListState.offset = 0;
+        this._loadUsersList();
+      }, 300);
+    });
+
+    this.elements.loadMoreUsersBtn?.addEventListener('click', () => {
+      this.usersListState.offset += this.usersListState.limit;
+      this._loadUsersList(true);  // append mode
+    });
+
+    // ユーザー削除関連
+    this.elements.usersSelectAll?.addEventListener('change', () => {
+      this._toggleSelectAllUsers();
+    });
+
+    this.elements.deleteSelectedUsers?.addEventListener('click', () => {
+      this._deleteSelectedUsers();
+    });
+
+    this.elements.deleteAllUsers?.addEventListener('click', () => {
+      this._deleteAllUsers();
+    });
   }
 
   /**
@@ -243,6 +340,12 @@ class App {
 
     document.querySelector(`.tab[data-tab="${tabId}"]`)?.classList.add('active');
     document.getElementById(tabId)?.classList.add('active');
+
+    // ユーザータブに切り替えた場合、リストを更新
+    if (tabId === 'users') {
+      this.usersListState.offset = 0;
+      this._loadUsersList();
+    }
   }
 
   /**
@@ -263,19 +366,14 @@ class App {
   }
 
   /**
-   * 設定を保存
+   * OBS接続設定を保存
    */
-  _saveSettings() {
+  _saveOBSSettings() {
     const settings = {
       obsAddress: this.elements.obsAddress.value,
       obsPassword: this.elements.obsPassword.value
     };
     storage.saveSettings(settings);
-
-    // イベント設定も保存
-    this._saveEventSettings();
-
-    this._showToast('設定を保存しました');
   }
 
   /**
@@ -407,6 +505,25 @@ class App {
    * チャットメッセージ受信時
    */
   async _onChatMessage(message) {
+    // liveChatIdの更新チェック
+    if (message.liveChatId) {
+      const previousLiveChatId = this.sessionManager.currentLiveChatId;
+      const result = this.sessionManager.updateLiveChatId(message.liveChatId);
+      if (result.changed) {
+        // 変更があった場合、コールバックで確認ダイアログが表示される
+        // ダイアログ表示中は処理を一時停止
+        return;
+      }
+      // 初期設定された場合は表示を更新
+      if (!previousLiveChatId && result.current) {
+        this._updateLiveChatIdDisplay();
+      }
+    } else if (!this.sessionManager.currentLiveChatId && !this.liveChatIdWarningShown) {
+      // liveChatIdが取得できない場合は警告（初回のみ）
+      console.warn('[App] チャットメッセージにliveChatIdが含まれていません（従来モードで動作）');
+      this.liveChatIdWarningShown = true;
+    }
+
     // コンソールログ
     if (message.superchat) {
       console.log(`[Chat] スパチャ: ${message.authorName} ${message.superchat.amount} "${message.message}"`);
@@ -420,12 +537,23 @@ class App {
     this._addCommentLog(message);
 
     // Stream Manager Eventを送信（初コメ、スパチャ累計、コマンド等）
-    await this.streamEventSender.processAndSend(message);
+    const result = await this.streamEventSender.processAndSend(message);
+
+    // 自動イベントをログに表示
+    if (result && result.events) {
+      for (const event of result.events) {
+        this._addEventLog(event.type, event.payload, message);
+      }
+    }
 
     // イベントエンジンで処理（ルールベースのアクション + パターンマッチイベント送信）
     const triggered = await this.eventEngine.processMessage(message);
     if (triggered.length > 0) {
       console.log(`[Rule] ${triggered.length}件のルールがトリガーされました`);
+      // ルールイベントをログに表示
+      for (const rule of triggered) {
+        this._addEventLog('Rule', { ruleName: rule.name, eventType: rule.customEventType }, message);
+      }
       // 発火済み状態を反映するためルール一覧を更新
       this._updateRulesList();
       // 起動済み状態を即座に保存
@@ -437,6 +565,20 @@ class App {
    * YouTube統計受信時
    */
   async _onStatsUpdate(stats) {
+    // activeLiveChatIdの更新チェック
+    if (stats.activeLiveChatId) {
+      const previousLiveChatId = this.sessionManager.currentLiveChatId;
+      const result = this.sessionManager.updateLiveChatId(stats.activeLiveChatId);
+      if (result.changed) {
+        // 変更があった場合、コールバックで確認ダイアログが表示される
+        return;
+      }
+      // 初期設定された場合は表示を更新
+      if (!previousLiveChatId && result.current) {
+        this._updateLiveChatIdDisplay();
+      }
+    }
+
     console.log(`[Stats] YouTube統計更新: 同接=${stats.concurrentViewers}, 高評価=${stats.likeCount}`);
 
     // SessionManagerで統計を更新（前回値も保存）
@@ -483,6 +625,83 @@ class App {
         <span class="comment-text">${this._escapeHtml(message.message)}</span>
       `;
     }
+
+    log.appendChild(item);
+
+    // 自動スクロール
+    log.scrollTop = log.scrollHeight;
+
+    // 最大件数を超えたら古いものを削除
+    while (log.children.length > 200) {
+      log.removeChild(log.firstChild);
+    }
+  }
+
+  /**
+   * イベント発火をログに追加
+   */
+  _addEventLog(eventType, payload, message = null) {
+    const log = this.elements.commentLog;
+    const item = document.createElement('div');
+    item.className = 'event-log-item';
+
+    // イベントタイプ別の表示テキスト
+    let eventText = '';
+    let eventClass = '';
+
+    switch (eventType) {
+      case 'FirstComment':
+        eventText = 'セッション初コメ';
+        eventClass = 'event-first';
+        break;
+      case 'NewViewer':
+        eventText = `全期間初コメ (${payload.globalViewerCount}人目)`;
+        eventClass = 'event-new-viewer';
+        break;
+      case 'SuperChat':
+        eventText = `スパチャ ¥${payload.amount?.toLocaleString() || 0}`;
+        eventClass = 'event-superchat';
+        break;
+      case 'Membership':
+        eventText = '新規メンバー';
+        eventClass = 'event-membership';
+        break;
+      case 'MembershipGift':
+        eventText = `ギフト ${payload.count}個`;
+        eventClass = 'event-gift';
+        break;
+      case 'MemberMilestone':
+        eventText = `マイルストーン ${payload.memberMonth}ヶ月`;
+        eventClass = 'event-milestone';
+        break;
+      case 'ModeratorComment':
+        eventText = 'モデレーター';
+        eventClass = 'event-moderator';
+        break;
+      case 'OwnerComment':
+        eventText = '配信者';
+        eventClass = 'event-owner';
+        break;
+      case 'MemberComment':
+        eventText = 'メンバー';
+        eventClass = 'event-member';
+        break;
+      case 'Rule':
+        eventText = `ルール: ${payload.eventType || payload.ruleName}`;
+        eventClass = 'event-rule';
+        break;
+      default:
+        eventText = eventType;
+        eventClass = 'event-other';
+    }
+
+    const authorName = message?.authorName || '';
+
+    item.innerHTML = `
+      <span class="comment-time">${this._formatTime(new Date())}</span>
+      <span class="event-badge ${eventClass}">${eventText}</span>
+      ${authorName ? `<span class="event-author">${this._escapeHtml(authorName)}</span>` : ''}
+    `;
 
     log.appendChild(item);
 
@@ -1195,6 +1414,7 @@ class App {
         }
         const stats = this.sessionManager.getStats();
         console.log('[App] セッション復元完了:', {
+          liveChatId: stats.liveChatId,
           users: stats.uniqueUsers,
           messages: stats.totalMessages,
           superChat: stats.totalSuperChat,
@@ -1203,6 +1423,8 @@ class App {
         });
         // ルール一覧を更新（起動済み状態を反映）
         this._updateRulesList();
+        // liveChatId表示を更新
+        this._updateLiveChatIdDisplay();
       }
     } else {
       console.log('[App] 復元可能なセッションなし');
@@ -1227,8 +1449,103 @@ class App {
     // ルール一覧を更新（起動済み状態をクリア）
     this._updateRulesList();
 
+    // liveChatId表示を更新（リセットで null になる）
+    this._updateLiveChatIdDisplay();
+
+    // 警告フラグもリセット（次のセッションで再度警告を出すため）
+    this.liveChatIdWarningShown = false;
+
     this._showToast('セッションをリセットしました');
     console.log('[App] セッションリセット完了');
+  }
+
+  /**
+   * liveChatId変更時のコールバック
+   * @param {string} previous - 前のliveChatId
+   * @param {string} current - 新しいliveChatId
+   */
+  _onLiveChatIdChange(previous, current) {
+    // 既にダイアログが開いている場合は無視
+    if (this.liveChatIdDialogOpen) {
+      console.log('[App] liveChatId変更ダイアログ表示中のため無視');
+      return;
+    }
+
+    this.liveChatIdDialogOpen = true;
+    this.pendingLiveChatId = current;
+
+    // 確認ダイアログを表示
+    const message = `配信が切り替わりました。\n\n` +
+      `前の配信: ${this._formatLiveChatId(previous)}\n` +
+      `新しい配信: ${this._formatLiveChatId(current)}\n\n` +
+      `セッションをリセットして新しい配信を開始しますか？\n` +
+      `「キャンセル」を選ぶと現在のセッションを継続します。`;
+
+    if (confirm(message)) {
+      // 新しいセッションを開始
+      this._switchToNewLiveChat(current);
+    } else {
+      // 現在のセッションを継続（liveChatIdは更新しない）
+      console.log('[App] 現在のセッションを継続');
+      this._showToast('現在のセッションを継続します');
+    }
+
+    this.liveChatIdDialogOpen = false;
+    this.pendingLiveChatId = null;
+  }
+
+  /**
+   * 新しい配信に切り替え
+   * @param {string} liveChatId - 新しいliveChatId
+   */
+  _switchToNewLiveChat(liveChatId) {
+    // セッションをリセット（liveChatIdを設定）
+    this.sessionManager.reset(liveChatId);
+    this.eventEngine.resetSession();
+    storage.clearSessionData();
+
+    // OBSのcommentedUsersもリセット
+    this.obsController.commentedUsers?.clear();
+
+    // ルール一覧を更新（起動済み状態をクリア）
+    this._updateRulesList();
+
+    // セッション情報表示を更新
+    this._updateLiveChatIdDisplay();
+
+    // 保存
+    this._saveSession();
+
+    this._showToast('新しい配信のセッションを開始しました');
+    console.log('[App] 新しい配信に切り替え:', liveChatId);
+  }
+
+  /**
+   * liveChatIdを表示用にフォーマット
+   * @param {string|null} liveChatId
+   * @returns {string}
+   */
+  _formatLiveChatId(liveChatId) {
+    if (!liveChatId) return '(不明)';
+    // 長い場合は省略
+    if (liveChatId.length > 20) {
+      return liveChatId.substring(0, 10) + '...' + liveChatId.substring(liveChatId.length - 7);
+    }
+    return liveChatId;
+  }
+
+  /**
+   * liveChatId表示を更新
+   */
+  _updateLiveChatIdDisplay() {
+    const liveChatIdEl = document.getElementById('current-live-chat-id');
+    if (liveChatIdEl) {
+      const liveChatId = this.sessionManager.currentLiveChatId;
+      liveChatIdEl.textContent = liveChatId
+        ? this._formatLiveChatId(liveChatId)
+        : '(未検出)';
+      liveChatIdEl.title = liveChatId || '';
+    }
   }
 
   /**
@@ -1251,14 +1568,53 @@ class App {
   // ========== エクスポート/インポート ==========
 
   /**
-   * データをエクスポート
+   * エクスポートモーダルを開く
    */
-  _exportData() {
+  _openExportModal() {
+    this.elements.exportModal.classList.remove('hidden');
+  }
+
+  /**
+   * エクスポートモーダルを閉じる
+   */
+  _closeExportModal() {
+    this.elements.exportModal.classList.add('hidden');
+  }
+
+  /**
+   * エクスポート実行
+   */
+  _confirmExport() {
+    const includeRules = this.elements.exportRules.checked;
+    const includeSettings = this.elements.exportSettings.checked;
+    const includeSession = this.elements.exportSession.checked;
+    const includeGlobalViewers = this.elements.exportGlobalViewers.checked;
+
+    // 何も選択されていない場合
+    if (!includeRules && !includeSettings && !includeSession && !includeGlobalViewers) {
+      this._showToast('エクスポート対象を選択してください', 'error');
+      return;
+    }
+
+    // エクスポートデータを構築
     const data = {
-      version: '1.0',
+      version: '1.1',
       exportedAt: new Date().toISOString(),
-      rules: this.eventEngine.getRules(),
-      settings: {
+      includes: {
+        rules: includeRules,
+        settings: includeSettings,
+        sessionData: includeSession,
+        globalViewers: includeGlobalViewers
+      }
+    };
+
+    // 選択された項目のみ含める
+    if (includeRules) {
+      data.rules = this.eventEngine.getRules();
+    }
+
+    if (includeSettings) {
+      data.settings = {
         obsConnection: {
           address: this.elements.obsAddress.value,
           password: this.elements.obsPassword.value
@@ -1279,13 +1635,19 @@ class App {
           moderatorComment: this.elements.eventModeratorComment.checked,
           memberComment: this.elements.eventMemberComment.checked
         }
-      },
-      sessionData: {
+      };
+    }
+
+    if (includeSession) {
+      data.sessionData = {
         ...this.sessionManager.exportData(),
         triggeredOnce: this.eventEngine.exportTriggeredOnce()
-      },
-      globalViewers: storage.exportGlobalViewers()
-    };
+      };
+    }
+
+    if (includeGlobalViewers) {
+      data.globalViewers = storage.exportGlobalViewers();
+    }
 
     // JSONファイルとしてダウンロード
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1299,8 +1661,9 @@ class App {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
+    this._closeExportModal();
     this._showToast('データをエクスポートしました');
-    console.log('[App] データエクスポート完了');
+    console.log('[App] データエクスポート完了:', data.includes);
   }
 
   /**
@@ -1331,17 +1694,26 @@ class App {
    * インポートモーダルを表示
    */
   _showImportModal(data) {
-    // サマリーを表示
+    // includes フィールドがある場合（v1.1+）はそれを使用、なければデータの存在で判断
+    const includes = data.includes || {
+      rules: !!data.rules,
+      settings: !!data.settings,
+      sessionData: !!data.sessionData,
+      globalViewers: !!data.globalViewers
+    };
+
     const rulesCount = data.rules?.length || 0;
-    const hasSettings = !!data.settings;
-    const hasSession = !!data.sessionData;
+    const hasSettings = includes.settings && !!data.settings;
+    const hasSession = includes.sessionData && !!data.sessionData;
+    const hasGlobalViewers = includes.globalViewers && !!data.globalViewers;
     const globalViewersCount = data.globalViewers?.count || 0;
 
+    // サマリーを表示
     let summary = `<strong>ファイル内容:</strong><br>`;
-    summary += `・ルール: ${rulesCount}件<br>`;
-    summary += `・設定: ${hasSettings ? 'あり' : 'なし'}<br>`;
-    summary += `・セッションデータ: ${hasSession ? 'あり' : 'なし'}<br>`;
-    summary += `・全期間視聴者: ${globalViewersCount > 0 ? globalViewersCount.toLocaleString() + '人' : 'なし'}`;
+    summary += `・ルール: ${includes.rules ? (rulesCount + '件') : '<span style="color:var(--text-muted);">含まれていません</span>'}<br>`;
+    summary += `・設定: ${hasSettings ? 'あり' : '<span style="color:var(--text-muted);">含まれていません</span>'}<br>`;
+    summary += `・セッションデータ: ${hasSession ? 'あり' : '<span style="color:var(--text-muted);">含まれていません</span>'}<br>`;
+    summary += `・全期間視聴者: ${hasGlobalViewers ? globalViewersCount.toLocaleString() + '人' : '<span style="color:var(--text-muted);">含まれていません</span>'}`;
 
     if (data.exportedAt) {
       const exportDate = new Date(data.exportedAt).toLocaleString('ja-JP');
@@ -1350,13 +1722,15 @@ class App {
 
     this.elements.importSummary.innerHTML = summary;
 
-    // チェックボックスの有効/無効を設定
-    this.elements.importRules.disabled = rulesCount === 0;
-    this.elements.importRules.checked = rulesCount > 0;
+    // チェックボックスの有効/無効を設定（含まれている項目のみ選択可能）
+    this.elements.importRules.disabled = !includes.rules || rulesCount === 0;
+    this.elements.importRules.checked = includes.rules && rulesCount > 0;
     this.elements.importSettings.disabled = !hasSettings;
     this.elements.importSettings.checked = hasSettings;
-    this.elements.importSession.disabled = !hasSession && globalViewersCount === 0;
+    this.elements.importSession.disabled = !hasSession;
     this.elements.importSession.checked = false; // セッションはデフォルトOFF
+    this.elements.importGlobalViewers.disabled = !hasGlobalViewers;
+    this.elements.importGlobalViewers.checked = false; // 全期間視聴者もデフォルトOFF
 
     this.elements.importModal.classList.remove('hidden');
   }
@@ -1432,33 +1806,317 @@ class App {
         this.elements.eventMemberComment.checked = events.memberComment || false;
       }
 
-      this._saveSettings();
+      this._saveOBSSettings();
       this._saveEventSettings();
       importedItems.push('設定');
     }
 
     // セッションデータのインポート
-    if (importSession) {
-      if (data.sessionData) {
-        this.sessionManager.importData(data.sessionData);
-        if (data.sessionData.triggeredOnce) {
-          this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
-        }
-        this._saveSession();
-        this._updateRulesList();
-        importedItems.push('セッションデータ');
+    if (importSession && data.sessionData) {
+      this.sessionManager.importData(data.sessionData);
+      if (data.sessionData.triggeredOnce) {
+        this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
       }
-      // 全期間視聴者データのインポート
-      if (data.globalViewers) {
-        storage.importGlobalViewers(data.globalViewers);
-        const count = data.globalViewers.count || 0;
-        importedItems.push(`全期間視聴者 ${count.toLocaleString()}人`);
-      }
+      this._saveSession();
+      this._updateRulesList();
+      importedItems.push('セッションデータ');
+    }
+
+    // 全期間視聴者データのインポート
+    const importGlobalViewers = this.elements.importGlobalViewers.checked;
+    if (importGlobalViewers && data.globalViewers) {
+      storage.importGlobalViewers(data.globalViewers);
+      const count = data.globalViewers.count || 0;
+      importedItems.push(`全期間視聴者 ${count.toLocaleString()}人`);
     }
 
     this._closeImportModal();
     this._showToast(`インポート完了: ${importedItems.join('、')}`);
     console.log('[App] インポート完了:', importedItems);
+  }
+
+  // ========== ユーザーリスト ==========
+
+  /**
+   * ユーザーリストを読み込み・表示
+   * @param {boolean} append - 追加読み込みモード
+   */
+  _loadUsersList(append = false) {
+    const { users, total } = storage.getGlobalUsersList({
+      sortBy: this.usersListState.sortBy,
+      sortOrder: 'desc',
+      filter: this.usersListState.filter,
+      limit: this.usersListState.limit,
+      offset: this.usersListState.offset
+    });
+
+    this.usersListState.total = total;
+
+    // ユーザー数を更新
+    this.elements.usersCount.textContent = `${total.toLocaleString()}人`;
+
+    // リストを更新
+    if (append) {
+      // 追加モード: 既存のリストに追加
+      const newHtml = this._renderUsersList(users);
+      if (newHtml) {
+        this.elements.usersList.insertAdjacentHTML('beforeend', newHtml);
+      }
+    } else {
+      // 通常モード: リストを置き換え
+      if (users.length === 0) {
+        this.elements.usersList.innerHTML = '<div class="empty-state">ユーザーデータがありません</div>';
+      } else {
+        this.elements.usersList.innerHTML = this._renderUsersList(users);
+      }
+    }
+
+    // 「もっと読み込む」ボタンの表示/非表示
+    const loadedCount = this.usersListState.offset + users.length;
+    if (loadedCount < total) {
+      this.elements.usersLoadMore.classList.remove('hidden');
+    } else {
+      this.elements.usersLoadMore.classList.add('hidden');
+    }
+
+    // イベントリスナーを設定
+    this._setupUserListEventListeners();
+
+    // 選択状態のUIを更新
+    this._updateUserSelectionUI();
+  }
+
+  /**
+   * ユーザーリストのイベントリスナーを設定
+   */
+  _setupUserListEventListeners() {
+    // チェックボックスのクリック
+    this.elements.usersList.querySelectorAll('.user-select-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const userItem = e.target.closest('.user-item');
+        const channelId = userItem?.dataset.channelId;
+        if (!channelId) return;
+
+        if (e.target.checked) {
+          this.usersListState.selectedUsers.add(channelId);
+          userItem.classList.add('selected');
+        } else {
+          this.usersListState.selectedUsers.delete(channelId);
+          userItem.classList.remove('selected');
+        }
+
+        this._updateUserSelectionUI();
+      });
+    });
+  }
+
+  /**
+   * 選択状態のUIを更新
+   */
+  _updateUserSelectionUI() {
+    const selectedCount = this.usersListState.selectedUsers.size;
+
+    // 選択削除ボタンの有効/無効
+    if (this.elements.deleteSelectedUsers) {
+      this.elements.deleteSelectedUsers.disabled = selectedCount === 0;
+      this.elements.deleteSelectedUsers.textContent =
+        selectedCount > 0 ? `選択削除 (${selectedCount})` : '選択削除';
+    }
+
+    // 全選択チェックボックスの状態
+    if (this.elements.usersSelectAll) {
+      const visibleCheckboxes = this.elements.usersList.querySelectorAll('.user-select-checkbox');
+      const allSelected = visibleCheckboxes.length > 0 &&
+        Array.from(visibleCheckboxes).every(cb => cb.checked);
+      this.elements.usersSelectAll.checked = allSelected;
+      this.elements.usersSelectAll.indeterminate =
+        selectedCount > 0 && !allSelected;
+    }
+  }
+
+  /**
+   * 全選択/全解除
+   */
+  _toggleSelectAllUsers() {
+    const selectAll = this.elements.usersSelectAll?.checked;
+    const checkboxes = this.elements.usersList.querySelectorAll('.user-select-checkbox');
+
+    checkboxes.forEach(checkbox => {
+      const userItem = checkbox.closest('.user-item');
+      const channelId = userItem?.dataset.channelId;
+      if (!channelId) return;
+
+      checkbox.checked = selectAll;
+      if (selectAll) {
+        this.usersListState.selectedUsers.add(channelId);
+        userItem.classList.add('selected');
+      } else {
+        this.usersListState.selectedUsers.delete(channelId);
+        userItem.classList.remove('selected');
+      }
+    });
+
+    this._updateUserSelectionUI();
+  }
+
+  /**
+   * 選択したユーザーを削除
+   */
+  _deleteSelectedUsers() {
+    const selectedIds = Array.from(this.usersListState.selectedUsers);
+    if (selectedIds.length === 0) return;
+
+    if (!confirm(`選択した${selectedIds.length}人のユーザーを削除しますか？`)) {
+      return;
+    }
+
+    const deletedCount = storage.deleteGlobalUsers(selectedIds);
+    this.usersListState.selectedUsers.clear();
+    this.usersListState.offset = 0;
+    this._loadUsersList();
+    this._showToast(`${deletedCount}人のユーザーを削除しました`);
+  }
+
+  /**
+   * 全ユーザーを削除
+   */
+  _deleteAllUsers() {
+    const total = this.usersListState.total;
+    if (total === 0) return;
+
+    if (!confirm(`すべてのユーザーデータ（${total.toLocaleString()}人）を削除しますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    storage.clearGlobalViewers();
+    this.usersListState.selectedUsers.clear();
+    this.usersListState.offset = 0;
+    this._loadUsersList();
+    this._showToast('すべてのユーザーデータを削除しました');
+  }
+
+  /**
+   * ユーザーリストのHTML生成
+   * @param {Array} users - ユーザー配列
+   * @returns {string} HTML文字列
+   */
+  _renderUsersList(users) {
+    if (!users || users.length === 0) return '';
+
+    return users.map(user => this._formatUserItem(user)).join('');
+  }
+
+  /**
+   * 個別ユーザーのHTML生成
+   * @param {Object} user - ユーザーオブジェクト
+   * @returns {string} HTML文字列
+   */
+  _formatUserItem(user) {
+    const stats = user.stats || {};
+    const roles = user.roles || {};
+    const isSelected = this.usersListState.selectedUsers.has(user.channelId);
+
+    // CSSクラスを決定
+    let itemClass = 'user-item';
+    if (roles.isOwner) itemClass += ' is-owner';
+    else if (roles.isModerator) itemClass += ' is-moderator';
+    else if (roles.isMember) itemClass += ' is-member';
+    else if (stats.totalSuperChat > 0) itemClass += ' has-superchat';
+    if (isSelected) itemClass += ' selected';
+
+    // バッジを生成
+    let badges = '';
+    if (roles.isOwner) {
+      badges += '<span class="user-badge owner">配信者</span>';
+    }
+    if (roles.isModerator) {
+      badges += '<span class="user-badge moderator">モデ</span>';
+    }
+    if (roles.isMember) {
+      badges += '<span class="user-badge member">メンバー</span>';
+    }
+
+    // アバター
+    let avatarContent = '';
+    if (user.profileImage) {
+      avatarContent = `<img src="${this._escapeHtml(user.profileImage)}" alt="" loading="lazy">`;
+    } else {
+      const initial = user.displayName ? user.displayName.charAt(0).toUpperCase() : '?';
+      avatarContent = `<div class="user-avatar-placeholder">${initial}</div>`;
+    }
+
+    // 最終コメント
+    let lastMessageHtml = '';
+    if (user.lastMessage && user.lastMessage.text) {
+      lastMessageHtml = `<div class="user-last-message">${this._escapeHtml(user.lastMessage.text)}</div>`;
+    }
+
+    // 統計
+    const totalMessages = stats.totalMessages || 0;
+    const totalSuperChat = stats.totalSuperChat || 0;
+    const totalSuperChatCount = stats.totalSuperChatCount || 0;
+    const sessionCount = stats.sessionCount || 0;
+
+    // スパチャ表示
+    let superChatStat = '';
+    if (totalSuperChat > 0 || totalSuperChatCount > 0) {
+      superChatStat = `
+        <div class="user-stat">
+          <span class="user-stat-value superchat">¥${totalSuperChat.toLocaleString()}</span>
+          <span>(${totalSuperChatCount}回)</span>
+        </div>
+      `;
+    }
+
+    // 時刻のフォーマット
+    const firstSeenAt = user.firstSeenAt ? this._formatDateTime(user.firstSeenAt) : '-';
+    const lastSeenAt = user.lastSeenAt ? this._formatDateTime(user.lastSeenAt) : '-';
+
+    return `
+      <div class="${itemClass}" data-channel-id="${this._escapeHtml(user.channelId)}">
+        <div class="user-checkbox">
+          <input type="checkbox" class="user-select-checkbox" ${isSelected ? 'checked' : ''}>
+        </div>
+        <div class="user-avatar">${avatarContent}</div>
+        <div class="user-info">
+          <div class="user-header">
+            <span class="user-name">${this._escapeHtml(user.displayName || user.channelId)}</span>
+            <div class="user-badges">${badges}</div>
+          </div>
+          <div class="user-stats">
+            <div class="user-stat">
+              <span>💬</span>
+              <span class="user-stat-value">${totalMessages.toLocaleString()}</span>
+            </div>
+            ${superChatStat}
+            <div class="user-stat">
+              <span>配信</span>
+              <span class="user-stat-value">${sessionCount}</span>
+              <span>回</span>
+            </div>
+          </div>
+          ${lastMessageHtml}
+          <div class="user-times">初回: ${firstSeenAt} / 最終: ${lastSeenAt}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * 日時をフォーマット
+   * @param {string} isoDate - ISO8601形式の日時
+   * @returns {string} フォーマットされた日時
+   */
+  _formatDateTime(isoDate) {
+    if (!isoDate) return '-';
+    const d = new Date(isoDate);
+    return d.toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 }
 

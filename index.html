@@ -20,6 +20,7 @@
     <nav class="tabs">
       <button class="tab active" data-tab="settings">設定</button>
       <button class="tab" data-tab="rules">ルール</button>
+      <button class="tab" data-tab="users">ユーザー</button>
       <button class="tab" data-tab="log">ログ</button>
     </nav>
 
@@ -46,8 +47,20 @@
 
       <div class="section">
         <h2>セッション管理</h2>
-        <p class="hint">新しい配信を開始する際はセッションをリセットしてください。累計データがクリアされます。</p>
-        <button id="reset-session" class="btn btn-full btn-danger">セッションをリセット</button>
+        <div class="session-info">
+          <div class="session-info-row">
+            <span class="session-info-label">配信ID:</span>
+            <span id="current-live-chat-id" class="session-info-value" title="">(未検出)</span>
+          </div>
+        </div>
+        <p class="hint">配信が切り替わると自動的にセッションリセットを確認します。</p>
+        <details class="advanced-options">
+          <summary>詳細設定</summary>
+          <div class="advanced-content">
+            <p class="hint">自動検出が機能しない場合や、同一配信内でリセットしたい場合に使用します。</p>
+            <button id="reset-session" class="btn btn-full btn-danger">手動でリセット</button>
+          </div>
+        </details>
       </div>
 
       <div class="section">
@@ -188,10 +201,6 @@
       </div>
 
       <div class="section">
-        <button id="save-settings" class="btn btn-full">設定を保存</button>
-      </div>
-
-      <div class="section">
         <h2>データ管理</h2>
         <p class="hint">ルール、設定、セッションデータをファイルに保存・読み込みできます。</p>
         <div class="button-group">
@@ -212,6 +221,44 @@
         <div id="rules-list" class="rules-list">
           <!-- ルールがここに動的に追加される -->
           <div class="empty-state">ルールがありません</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ユーザータブ -->
+    <section id="users" class="tab-content">
+      <div class="section">
+        <div class="section-header">
+          <h2>ユーザー一覧</h2>
+          <span id="users-count" class="users-count">0人</span>
+        </div>
+        <div class="users-controls">
+          <div class="users-search">
+            <input type="text" id="users-filter" placeholder="ユーザー名で検索...">
+          </div>
+          <div class="users-sort">
+            <select id="users-sort">
+              <option value="lastSeenAt">最終コメント日時</option>
+              <option value="totalSuperChat">スパチャ累計</option>
+              <option value="totalMessages">メッセージ数</option>
+              <option value="firstSeenAt">初回コメント日時</option>
+            </select>
+          </div>
+        </div>
+        <div class="users-actions">
+          <label class="users-select-all">
+            <input type="checkbox" id="users-select-all">
+            <span>全選択</span>
+          </label>
+          <button id="delete-selected-users" class="btn btn-small btn-danger" disabled>選択削除</button>
+          <button id="delete-all-users" class="btn btn-small btn-secondary">全削除</button>
+        </div>
+        <div id="users-list" class="users-list">
+          <!-- ユーザーがここに動的に追加される -->
+          <div class="empty-state">ユーザーデータがありません</div>
+        </div>
+        <div id="users-load-more" class="users-load-more hidden">
+          <button id="load-more-users" class="btn btn-secondary btn-full">もっと読み込む</button>
         </div>
       </div>
     </section>
@@ -429,6 +476,44 @@
     </div>
   </div>
 
+  <!-- エクスポートオプションモーダル -->
+  <div id="export-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>データのエクスポート</h3>
+        <button class="modal-close" id="export-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px;">エクスポートする項目を選択してください。</p>
+        <div class="form-group">
+          <label>エクスポート対象</label>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="export-rules" checked>
+              <span>ルール</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="export-settings" checked>
+              <span>設定（OBS接続・イベント設定）</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="export-session">
+              <span>セッションデータ（統計情報）</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="export-global-viewers">
+              <span>全期間視聴者（NewViewer履歴）</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="export-confirm" class="btn btn-primary">エクスポート</button>
+        <button id="export-cancel" class="btn btn-secondary">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
   <!-- インポートオプションモーダル -->
   <div id="import-modal" class="modal hidden">
     <div class="modal-content">
@@ -471,6 +556,10 @@
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
               <input type="checkbox" id="import-session">
               <span>セッションデータ（統計情報）</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="import-global-viewers">
+              <span>全期間視聴者（NewViewer履歴）<br><small style="color:var(--text-muted);">※常にマージ（既存データに追加）</small></span>
             </label>
           </div>
         </div>

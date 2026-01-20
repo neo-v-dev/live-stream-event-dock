@@ -439,6 +439,83 @@ fieldset.form-group legend {
   font-weight: bold;
 }
 
+/* イベントログ */
+.event-log-item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.event-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.event-first {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.event-new-viewer {
+  background: #9c27b0;
+  color: #fff;
+}
+
+.event-superchat {
+  background: linear-gradient(135deg, #ffb300, #ff8f00);
+  color: #000;
+}
+
+.event-membership {
+  background: var(--accent-success);
+  color: #000;
+}
+
+.event-gift {
+  background: #e91e63;
+  color: #fff;
+}
+
+.event-milestone {
+  background: #00bcd4;
+  color: #000;
+}
+
+.event-moderator {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.event-owner {
+  background: var(--accent-danger);
+  color: #fff;
+}
+
+.event-member {
+  background: var(--accent-success);
+  color: #000;
+}
+
+.event-rule {
+  background: var(--accent-warning);
+  color: #000;
+}
+
+.event-other {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.event-author {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 /* モーダル */
 .modal {
   position: fixed;
@@ -677,4 +754,311 @@ details.form-group input {
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 12px;
+}
+
+/* ユーザーリスト */
+.users-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.users-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.users-search {
+  flex: 1;
+}
+
+.users-search input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.users-search input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.users-sort select {
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.users-sort select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
+
+.user-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 10px;
+  border-left: 3px solid var(--border-color);
+}
+
+.user-item.has-superchat {
+  border-left-color: var(--accent-warning);
+}
+
+.user-item.is-member {
+  border-left-color: var(--accent-success);
+}
+
+.user-item.is-moderator {
+  border-left-color: var(--accent-primary);
+}
+
+.user-item.is-owner {
+  border-left-color: var(--accent-danger);
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.user-badge {
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.user-badge.member {
+  background: var(--accent-success);
+  color: #000;
+}
+
+.user-badge.moderator {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.user-badge.owner {
+  background: var(--accent-danger);
+  color: #fff;
+}
+
+.user-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.user-stat {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.user-stat-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-stat-value.superchat {
+  color: var(--accent-warning);
+}
+
+.user-last-message {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-times {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.users-load-more {
+  margin-top: 12px;
+}
+
+.users-load-more.hidden {
+  display: none;
+}
+
+/* ユーザー削除関連 */
+.users-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.users-select-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.users-select-all input {
+  margin: 0;
+}
+
+.users-actions .btn {
+  margin-left: auto;
+}
+
+.users-actions .btn:first-of-type {
+  margin-left: auto;
+}
+
+.users-actions .btn + .btn {
+  margin-left: 4px;
+}
+
+.user-item .user-checkbox {
+  display: flex;
+  align-items: center;
+  margin-right: 6px;
+}
+
+.user-item .user-checkbox input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.user-item.selected {
+  background: rgba(0, 120, 212, 0.1);
+}
+
+/* セッション情報表示 */
+.session-info {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.session-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-info-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.session-info-value {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* 詳細設定（折りたたみ） */
+.advanced-options {
+  margin-top: 8px;
+}
+
+.advanced-options summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.advanced-options summary:hover {
+  color: var(--text-secondary);
+}
+
+.advanced-options[open] summary {
+  margin-bottom: 8px;
+}
+
+.advanced-content {
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
 }

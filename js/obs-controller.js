@@ -390,6 +390,12 @@ class OBSController {
   _convertChatMessage(liveChatMessage) {
     if (!liveChatMessage) return null;
 
+    // デバッグ: 受信データの構造を確認（初回のみ）
+    if (!this._loggedChatStructure) {
+      console.log('[OBS] チャットメッセージ構造:', JSON.stringify(liveChatMessage, null, 2));
+      this._loggedChatStructure = true;
+    }
+
     const snippet = liveChatMessage.snippet || {};
     const authorDetails = liveChatMessage.authorDetails || {};
     const type = snippet.type || 'textMessageEvent';
@@ -410,6 +416,7 @@ class OBSController {
     const message = {
       id: liveChatMessage.id,
       type: type,
+      liveChatId: snippet.liveChatId || null,  // 配信識別用
       authorName: authorDetails.displayName || '',
       authorChannelId: channelId,
       authorProfileImage: authorDetails.profileImageUrl || '',
@@ -475,6 +482,7 @@ class OBSController {
 
     return {
       videoId: videoResource.id || '',
+      activeLiveChatId: liveDetails.activeLiveChatId || null,  // 配信識別用
       concurrentViewers: parseInt(liveDetails.concurrentViewers) || 0,
       likeCount: parseInt(statistics.likeCount) || 0,
       viewCount: parseInt(statistics.viewCount) || 0,

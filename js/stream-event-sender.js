@@ -110,6 +110,7 @@ class StreamEventSender {
     const eventData = {
       type,
       timestamp: new Date().toISOString(),
+      liveChatId: this.sessionManager.currentLiveChatId,
       sessionId: this.sessionManager.sessionId,
       user: userContext,
       payload

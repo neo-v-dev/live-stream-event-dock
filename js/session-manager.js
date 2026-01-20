@@ -6,6 +6,12 @@ class SessionManager {
     // セッションID（配信ごとにユニーク）
     this.sessionId = this._generateSessionId();
 
+    // 現在の配信のliveChatId（YouTube APIから取得）
+    this.currentLiveChatId = null;
+
+    // liveChatId変更時のコールバック（app.jsで設定）
+    this.onLiveChatIdChange = null;
+
     // ユーザーデータ: channelId -> UserSession
     this.users = new Map();
 
@@ -81,9 +87,11 @@ class SessionManager {
 
   /**
    * セッションをリセット（新しい配信開始時）
+   * @param {string|null} newLiveChatId - 新しいliveChatId（省略時はnullでリセット）
    */
-  reset() {
+  reset(newLiveChatId = null) {
     this.sessionId = this._generateSessionId();
+    this.currentLiveChatId = newLiveChatId;
     this.users.clear();
     this.startedAt = new Date().toISOString();
     this.newMemberCount = 0;
@@ -102,7 +110,51 @@ class SessionManager {
       viewCount: 0
     };
 
-    console.log('[Session] 新しいセッション開始:', this.sessionId);
+    console.log('[Session] 新しいセッション開始:', this.sessionId, 'liveChatId:', newLiveChatId);
+  }
+
+  /**
+   * liveChatIdを更新し、変更があればコールバックを呼び出す
+   * @param {string|null} liveChatId - 新しいliveChatId
+   * @returns {Object} { changed: boolean, previous: string|null, current: string|null }
+   */
+  updateLiveChatId(liveChatId) {
+    // nullや空文字は無視（liveChatIdが取得できない状況）
+    if (!liveChatId) {
+      return { changed: false, previous: this.currentLiveChatId, current: this.currentLiveChatId };
+    }
+
+    const previous = this.currentLiveChatId;
+
+    // 初回設定の場合
+    if (!previous) {
+      this.currentLiveChatId = liveChatId;
+      console.log('[Session] liveChatId初期設定:', liveChatId);
+      return { changed: false, previous: null, current: liveChatId };
+    }
+
+    // 変更があった場合
+    if (previous !== liveChatId) {
+      console.log('[Session] liveChatId変更検出:', previous, '->', liveChatId);
+
+      // コールバックを呼び出し（app.jsで確認ダイアログを表示）
+      if (this.onLiveChatIdChange) {
+        this.onLiveChatIdChange(previous, liveChatId);
+      }
+
+      return { changed: true, previous, current: liveChatId };
+    }
+
+    return { changed: false, previous, current: liveChatId };
+  }
+
+  /**
+   * liveChatIdを強制的に設定（確認ダイアログ後など）
+   * @param {string|null} liveChatId
+   */
+  setLiveChatId(liveChatId) {
+    this.currentLiveChatId = liveChatId;
+    console.log('[Session] liveChatId設定:', liveChatId);
   }
 
   /**
@@ -117,6 +169,7 @@ class SessionManager {
 
     return {
       sessionId: this.sessionId,
+      liveChatId: this.currentLiveChatId,
       startedAt: this.startedAt,
       newMemberCount: this.newMemberCount,
       newViewerCount: this.newViewerCount,
@@ -132,6 +185,7 @@ class SessionManager {
 
     try {
       this.sessionId = data.sessionId || this._generateSessionId();
+      this.currentLiveChatId = data.liveChatId || null;
       this.startedAt = data.startedAt || new Date().toISOString();
       this.newMemberCount = data.newMemberCount || 0;
       this.newViewerCount = data.newViewerCount || 0;
@@ -155,7 +209,7 @@ class SessionManager {
         }
       }
 
-      console.log('[Session] セッション復元:', this.sessionId, `(${this.users.size}ユーザー)`);
+      console.log('[Session] セッション復元:', this.sessionId, 'liveChatId:', this.currentLiveChatId, `(${this.users.size}ユーザー)`);
       return true;
     } catch (e) {
       console.error('[Session] セッション復元エラー:', e);
@@ -253,6 +307,9 @@ class SessionManager {
         }
       }
     }
+
+    // グローバルユーザー情報を更新
+    this._updateGlobalUser(message, user, isFirstComment);
 
     // スーパーチャット処理
     if (message.superchat) {
@@ -426,6 +483,7 @@ class SessionManager {
 
     return {
       sessionId: this.sessionId,
+      liveChatId: this.currentLiveChatId,
       startedAt: this.startedAt,
       uniqueUsers: this.users.size,
       totalMessages,
@@ -476,5 +534,48 @@ class SessionManager {
       current: { ...this.youtubeStats },
       previous: { ...this.previousYoutubeStats }
     };
+  }
+
+  /**
+   * グローバルユーザー情報を更新（プライベートメソッド）
+   * @param {Object} message - メッセージオブジェクト
+   * @param {Object} user - セッションユーザー情報
+   * @param {boolean} isFirstComment - セッション内初コメントかどうか
+   */
+  _updateGlobalUser(message, user, isFirstComment) {
+    const channelId = message.authorChannelId;
+    if (!channelId) return;
+
+    // スーパーチャット金額を計算
+    let superChatAmount = 0;
+    let superChatIncrement = 0;
+    if (message.superchat) {
+      superChatAmount = this._parseAmount(message.superchat);
+      superChatIncrement = 1;
+    }
+
+    // ギフト数を計算
+    let giftIncrement = 0;
+    if (message.membershipGift) {
+      giftIncrement = message.membershipGift.count || 1;
+    }
+
+    // ユーザー情報を更新
+    storage.updateGlobalUser(channelId, {
+      displayName: message.authorName,
+      profileImage: message.authorProfileImage || '',
+      isMember: message.isMember || false,
+      isModerator: message.isModerator || false,
+      isOwner: message.isOwner || false,
+      messageIncrement: 1,
+      superChatAmount: superChatAmount,
+      superChatIncrement: superChatIncrement,
+      giftIncrement: giftIncrement,
+      newSession: isFirstComment,
+      lastMessage: {
+        text: message.message || '',
+        timestamp: new Date().toISOString()
+      }
+    });
   }
 }
