@@ -180,6 +180,16 @@
       <div class="section">
         <button id="save-settings" class="btn btn-full">設定を保存</button>
       </div>
+
+      <div class="section">
+        <h2>データ管理</h2>
+        <p class="hint">ルール、設定、セッションデータをファイルに保存・読み込みできます。</p>
+        <div class="button-group">
+          <button id="export-data" class="btn btn-secondary">エクスポート</button>
+          <button id="import-data" class="btn btn-secondary">インポート</button>
+        </div>
+        <input type="file" id="import-file" accept=".json" style="display:none;">
+      </div>
     </section>
 
     <!-- ルールタブ -->
@@ -400,6 +410,59 @@
           <button id="save-rule" class="btn btn-primary">保存</button>
           <button id="cancel-rule" class="btn btn-secondary">キャンセル</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- インポートオプションモーダル -->
+  <div id="import-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>データのインポート</h3>
+        <button class="modal-close" id="import-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="import-summary" style="margin-bottom: 12px;"></p>
+        <div class="form-group">
+          <label>インポート方法</label>
+          <div class="import-options">
+            <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer;">
+              <input type="radio" name="import-mode" value="replace" checked>
+              <span>
+                <strong>上書き</strong><br>
+                <small style="color:var(--text-muted);">既存のルールを削除して置き換える</small>
+              </span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="radio" name="import-mode" value="merge">
+              <span>
+                <strong>追加（マージ）</strong><br>
+                <small style="color:var(--text-muted);">既存のルールを残して追加する</small>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>インポート対象</label>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="import-rules" checked>
+              <span>ルール</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="import-settings" checked>
+              <span>設定（OBS接続・イベント設定）</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="import-session">
+              <span>セッションデータ（統計情報）</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="import-confirm" class="btn btn-primary">インポート</button>
+        <button id="import-cancel" class="btn btn-secondary">キャンセル</button>
       </div>
     </div>
   </div>

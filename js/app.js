@@ -127,7 +127,20 @@ class App {
       eventForwardComments: document.getElementById('event-forward-comments'),
       eventOwnerComment: document.getElementById('event-owner-comment'),
       eventModeratorComment: document.getElementById('event-moderator-comment'),
-      eventMemberComment: document.getElementById('event-member-comment')
+      eventMemberComment: document.getElementById('event-member-comment'),
+
+      // エクスポート/インポート
+      exportData: document.getElementById('export-data'),
+      importData: document.getElementById('import-data'),
+      importFile: document.getElementById('import-file'),
+      importModal: document.getElementById('import-modal'),
+      importModalClose: document.getElementById('import-modal-close'),
+      importSummary: document.getElementById('import-summary'),
+      importRules: document.getElementById('import-rules'),
+      importSettings: document.getElementById('import-settings'),
+      importSession: document.getElementById('import-session'),
+      importConfirm: document.getElementById('import-confirm'),
+      importCancel: document.getElementById('import-cancel')
     };
   }
 
@@ -155,6 +168,17 @@ class App {
 
     // セッションリセット
     this.elements.resetSession?.addEventListener('click', () => this._resetSession());
+
+    // エクスポート/インポート
+    this.elements.exportData?.addEventListener('click', () => this._exportData());
+    this.elements.importData?.addEventListener('click', () => this.elements.importFile.click());
+    this.elements.importFile?.addEventListener('change', (e) => this._handleImportFile(e));
+    this.elements.importModalClose?.addEventListener('click', () => this._closeImportModal());
+    this.elements.importCancel?.addEventListener('click', () => this._closeImportModal());
+    this.elements.importConfirm?.addEventListener('click', () => this._confirmImport());
+    this.elements.importModal?.addEventListener('click', (e) => {
+      if (e.target === this.elements.importModal) this._closeImportModal();
+    });
 
     // モーダル
     document.querySelector('.modal-close').addEventListener('click', () => this._closeRuleModal());
@@ -1206,6 +1230,206 @@ class App {
     }, 30000);
 
     console.log('[App] セッション自動保存開始（30秒間隔）');
+  }
+
+  // ========== エクスポート/インポート ==========
+
+  /**
+   * データをエクスポート
+   */
+  _exportData() {
+    const data = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      rules: this.eventEngine.getRules(),
+      settings: {
+        obsConnection: {
+          address: this.elements.obsAddress.value,
+          password: this.elements.obsPassword.value
+        },
+        events: {
+          enabled: this.elements.eventEnabled.checked,
+          eventName: this.elements.eventName.value,
+          includeOriginal: this.elements.eventIncludeOriginal.checked,
+          firstComment: this.elements.eventFirstComment.checked,
+          superChat: this.elements.eventSuperChat.checked,
+          membership: this.elements.eventMembership.checked,
+          membershipGift: this.elements.eventMembershipGift.checked,
+          memberMilestone: this.elements.eventMemberMilestone.checked,
+          sessionStats: this.elements.eventSessionStats.checked,
+          forwardComments: this.elements.eventForwardComments.checked,
+          ownerComment: this.elements.eventOwnerComment.checked,
+          moderatorComment: this.elements.eventModeratorComment.checked,
+          memberComment: this.elements.eventMemberComment.checked
+        }
+      },
+      sessionData: {
+        ...this.sessionManager.exportData(),
+        triggeredOnce: this.eventEngine.exportTriggeredOnce()
+      }
+    };
+
+    // JSONファイルとしてダウンロード
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.download = `live-stream-event-dock-${timestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    this._showToast('データをエクスポートしました');
+    console.log('[App] データエクスポート完了');
+  }
+
+  /**
+   * インポートファイル処理
+   */
+  _handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        this._pendingImportData = data;
+        this._showImportModal(data);
+      } catch (err) {
+        this._showToast('ファイルの読み込みに失敗しました: ' + err.message, 'error');
+        console.error('[App] インポートエラー:', err);
+      }
+    };
+    reader.readAsText(file);
+
+    // ファイル入力をリセット（同じファイルを再選択可能にする）
+    event.target.value = '';
+  }
+
+  /**
+   * インポートモーダルを表示
+   */
+  _showImportModal(data) {
+    // サマリーを表示
+    const rulesCount = data.rules?.length || 0;
+    const hasSettings = !!data.settings;
+    const hasSession = !!data.sessionData;
+
+    let summary = `<strong>ファイル内容:</strong><br>`;
+    summary += `・ルール: ${rulesCount}件<br>`;
+    summary += `・設定: ${hasSettings ? 'あり' : 'なし'}<br>`;
+    summary += `・セッションデータ: ${hasSession ? 'あり' : 'なし'}`;
+
+    if (data.exportedAt) {
+      const exportDate = new Date(data.exportedAt).toLocaleString('ja-JP');
+      summary += `<br><small style="color:var(--text-muted);">エクスポート日時: ${exportDate}</small>`;
+    }
+
+    this.elements.importSummary.innerHTML = summary;
+
+    // チェックボックスの有効/無効を設定
+    this.elements.importRules.disabled = rulesCount === 0;
+    this.elements.importRules.checked = rulesCount > 0;
+    this.elements.importSettings.disabled = !hasSettings;
+    this.elements.importSettings.checked = hasSettings;
+    this.elements.importSession.disabled = !hasSession;
+    this.elements.importSession.checked = false; // セッションはデフォルトOFF
+
+    this.elements.importModal.classList.remove('hidden');
+  }
+
+  /**
+   * インポートモーダルを閉じる
+   */
+  _closeImportModal() {
+    this.elements.importModal.classList.add('hidden');
+    this._pendingImportData = null;
+  }
+
+  /**
+   * インポートを実行
+   */
+  _confirmImport() {
+    const data = this._pendingImportData;
+    if (!data) return;
+
+    const importMode = document.querySelector('input[name="import-mode"]:checked')?.value || 'replace';
+    const importRules = this.elements.importRules.checked;
+    const importSettings = this.elements.importSettings.checked;
+    const importSession = this.elements.importSession.checked;
+
+    let importedItems = [];
+
+    // ルールのインポート
+    if (importRules && data.rules) {
+      if (importMode === 'replace') {
+        // 上書き: 既存ルールをすべて削除
+        const existingRules = this.eventEngine.getRules();
+        existingRules.forEach(r => this.eventEngine.deleteRule(r.id));
+      }
+
+      // ルールを追加（IDは新規生成）
+      data.rules.forEach(rule => {
+        const newRule = { ...rule };
+        if (importMode === 'merge') {
+          // マージ時はIDを新規生成して重複を避ける
+          newRule.id = null;
+        }
+        this.eventEngine.addRule(newRule);
+      });
+
+      this._saveRulesToStorage();
+      this._updateRulesList();
+      importedItems.push(`ルール ${data.rules.length}件`);
+    }
+
+    // 設定のインポート
+    if (importSettings && data.settings) {
+      const { obsConnection, events } = data.settings;
+
+      if (obsConnection) {
+        this.elements.obsAddress.value = obsConnection.address || 'ws://localhost:4455';
+        this.elements.obsPassword.value = obsConnection.password || '';
+      }
+
+      if (events) {
+        this.elements.eventEnabled.checked = events.enabled !== false;
+        this.elements.eventName.value = events.eventName || 'LiveStreamEvent';
+        this.elements.eventIncludeOriginal.checked = events.includeOriginal || false;
+        this.elements.eventFirstComment.checked = events.firstComment !== false;
+        this.elements.eventSuperChat.checked = events.superChat !== false;
+        this.elements.eventMembership.checked = events.membership !== false;
+        this.elements.eventMembershipGift.checked = events.membershipGift !== false;
+        this.elements.eventMemberMilestone.checked = events.memberMilestone !== false;
+        this.elements.eventSessionStats.checked = events.sessionStats !== false;
+        this.elements.eventForwardComments.checked = events.forwardComments || false;
+        this.elements.eventOwnerComment.checked = events.ownerComment || false;
+        this.elements.eventModeratorComment.checked = events.moderatorComment || false;
+        this.elements.eventMemberComment.checked = events.memberComment || false;
+      }
+
+      this._saveSettings();
+      this._saveEventSettings();
+      importedItems.push('設定');
+    }
+
+    // セッションデータのインポート
+    if (importSession && data.sessionData) {
+      this.sessionManager.importData(data.sessionData);
+      if (data.sessionData.triggeredOnce) {
+        this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
+      }
+      this._saveSession();
+      this._updateRulesList();
+      importedItems.push('セッションデータ');
+    }
+
+    this._closeImportModal();
+    this._showToast(`インポート完了: ${importedItems.join('、')}`);
+    console.log('[App] インポート完了:', importedItems);
   }
 }
 
