@@ -134,6 +134,7 @@ class Storage {
 
       // 基本イベント
       firstComment: { enabled: true },
+      newViewer: { enabled: false },  // 全期間初コメ（NewViewer）
       superChat: { enabled: true },
       membership: { enabled: true },
       membershipGift: { enabled: true },
@@ -169,6 +170,78 @@ class Storage {
    */
   clearSessionData() {
     return this.remove('sessionData');
+  }
+
+  // ========== 全期間初コメユーザー（NewViewer）管理 ==========
+
+  /**
+   * 全期間初コメユーザーを保存
+   */
+  saveGlobalViewers(channelIds) {
+    return this.set('globalViewers', {
+      channelIds: channelIds,
+      count: channelIds.length,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  /**
+   * 全期間初コメユーザーを読み込み
+   */
+  loadGlobalViewers() {
+    const data = this.get('globalViewers', null);
+    return data ? data.channelIds : [];
+  }
+
+  /**
+   * 全期間初コメユーザーを追加
+   * @returns {boolean} 新規ユーザーだった場合true
+   */
+  addGlobalViewer(channelId) {
+    if (!channelId) return false;
+
+    const channelIds = this.loadGlobalViewers();
+
+    // 既に存在する場合は新規ではない
+    if (channelIds.includes(channelId)) {
+      return false;
+    }
+
+    channelIds.push(channelId);
+    this.saveGlobalViewers(channelIds);
+    return true;
+  }
+
+  /**
+   * 全期間初コメユーザー数を取得
+   */
+  getGlobalViewersCount() {
+    const data = this.get('globalViewers', null);
+    return data ? data.count : 0;
+  }
+
+  /**
+   * 全期間初コメユーザーをクリア
+   */
+  clearGlobalViewers() {
+    return this.remove('globalViewers');
+  }
+
+  /**
+   * 全期間初コメユーザーをエクスポート
+   */
+  exportGlobalViewers() {
+    return this.get('globalViewers', { channelIds: [], count: 0, updatedAt: null });
+  }
+
+  /**
+   * 全期間初コメユーザーをインポート
+   */
+  importGlobalViewers(data) {
+    if (data && Array.isArray(data.channelIds)) {
+      return this.saveGlobalViewers(data.channelIds);
+    }
+    return false;
   }
 }
 

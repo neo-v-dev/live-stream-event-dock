@@ -102,6 +102,8 @@ class App {
       conditionMemberCountThresholdGroup: document.getElementById('condition-member-count-threshold-group'),
       conditionIncludeGifts: document.getElementById('condition-include-gifts'),
       conditionIncludeGiftsGroup: document.getElementById('condition-include-gifts-group'),
+      conditionNewViewerThreshold: document.getElementById('condition-new-viewer-threshold'),
+      conditionNewViewerThresholdGroup: document.getElementById('condition-new-viewer-threshold-group'),
       conditionViewerThreshold: document.getElementById('condition-viewer-threshold'),
       conditionViewerThresholdGroup: document.getElementById('condition-viewer-threshold-group'),
       conditionLikeThreshold: document.getElementById('condition-like-threshold'),
@@ -119,6 +121,7 @@ class App {
       eventName: document.getElementById('event-name'),
       eventIncludeOriginal: document.getElementById('event-include-original'),
       eventFirstComment: document.getElementById('event-first-comment'),
+      eventNewViewer: document.getElementById('event-new-viewer'),
       eventSuperChat: document.getElementById('event-super-chat'),
       eventMembership: document.getElementById('event-membership'),
       eventMembershipGift: document.getElementById('event-membership-gift'),
@@ -287,6 +290,7 @@ class App {
     this.elements.eventIncludeOriginal.checked = eventSettings.includeOriginal || false;
 
     this.elements.eventFirstComment.checked = eventSettings.firstComment?.enabled !== false;
+    this.elements.eventNewViewer.checked = eventSettings.newViewer?.enabled || false;
     this.elements.eventSuperChat.checked = eventSettings.superChat?.enabled !== false;
     this.elements.eventMembership.checked = eventSettings.membership?.enabled !== false;
     this.elements.eventMembershipGift.checked = eventSettings.membershipGift?.enabled !== false;
@@ -313,6 +317,7 @@ class App {
 
       forwardComments: { enabled: this.elements.eventForwardComments.checked },
       firstComment: { enabled: this.elements.eventFirstComment.checked },
+      newViewer: { enabled: this.elements.eventNewViewer.checked },
       superChat: { enabled: this.elements.eventSuperChat.checked },
       membership: { enabled: this.elements.eventMembership.checked },
       membershipGift: { enabled: this.elements.eventMembershipGift.checked },
@@ -576,6 +581,7 @@ class App {
     this.elements.conditionGiftThreshold.value = condition.giftThreshold || 10;
     this.elements.conditionMemberCountThreshold.value = condition.memberCountThreshold || 10;
     this.elements.conditionIncludeGifts.checked = condition.includeGifts || false;
+    this.elements.conditionNewViewerThreshold.value = condition.newViewerThreshold || 10;
     this.elements.conditionViewerThreshold.value = condition.viewerThreshold || 100;
     this.elements.conditionLikeThreshold.value = condition.likeThreshold || 100;
 
@@ -644,6 +650,10 @@ class App {
     const showMemberCountThreshold = type === 'membershipCount';
     this.elements.conditionMemberCountThresholdGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
     this.elements.conditionIncludeGiftsGroup.style.display = showMemberCountThreshold ? 'block' : 'none';
+
+    // 新規視聴者数閾値の表示/非表示（newViewerCount時のみ）
+    const showNewViewerThreshold = type === 'newViewerCount';
+    this.elements.conditionNewViewerThresholdGroup.style.display = showNewViewerThreshold ? 'block' : 'none';
 
     // 同時接続数閾値の表示/非表示（viewerCount時のみ）
     const showViewerThreshold = type === 'viewerCount';
@@ -873,6 +883,7 @@ class App {
         giftThreshold: parseInt(this.elements.conditionGiftThreshold.value) || 1,
         memberCountThreshold: parseInt(this.elements.conditionMemberCountThreshold.value) || 10,
         includeGifts: this.elements.conditionIncludeGifts.checked,
+        newViewerThreshold: parseInt(this.elements.conditionNewViewerThreshold.value) || 10,
         viewerThreshold: parseInt(this.elements.conditionViewerThreshold.value) || 100,
         likeThreshold: parseInt(this.elements.conditionLikeThreshold.value) || 100
       },
@@ -1016,6 +1027,7 @@ class App {
       commentCount: 'コメント数',
       membership: 'メンバーシップ',
       membershipCount: 'メンバー加入数',
+      newViewerCount: '新規視聴者数',
       viewerCount: '同時接続数',
       likeCount: '高評価数'
     };
@@ -1115,6 +1127,10 @@ class App {
 
     if (condition.type === 'likeCount') {
       text += ` (${condition.likeThreshold || 100}件達成)`;
+    }
+
+    if (condition.type === 'newViewerCount') {
+      text += ` (${condition.newViewerThreshold || 10}人達成)`;
     }
 
     return text;
@@ -1252,6 +1268,7 @@ class App {
           eventName: this.elements.eventName.value,
           includeOriginal: this.elements.eventIncludeOriginal.checked,
           firstComment: this.elements.eventFirstComment.checked,
+          newViewer: this.elements.eventNewViewer.checked,
           superChat: this.elements.eventSuperChat.checked,
           membership: this.elements.eventMembership.checked,
           membershipGift: this.elements.eventMembershipGift.checked,
@@ -1266,7 +1283,8 @@ class App {
       sessionData: {
         ...this.sessionManager.exportData(),
         triggeredOnce: this.eventEngine.exportTriggeredOnce()
-      }
+      },
+      globalViewers: storage.exportGlobalViewers()
     };
 
     // JSONファイルとしてダウンロード
@@ -1317,11 +1335,13 @@ class App {
     const rulesCount = data.rules?.length || 0;
     const hasSettings = !!data.settings;
     const hasSession = !!data.sessionData;
+    const globalViewersCount = data.globalViewers?.count || 0;
 
     let summary = `<strong>ファイル内容:</strong><br>`;
     summary += `・ルール: ${rulesCount}件<br>`;
     summary += `・設定: ${hasSettings ? 'あり' : 'なし'}<br>`;
-    summary += `・セッションデータ: ${hasSession ? 'あり' : 'なし'}`;
+    summary += `・セッションデータ: ${hasSession ? 'あり' : 'なし'}<br>`;
+    summary += `・全期間視聴者: ${globalViewersCount > 0 ? globalViewersCount.toLocaleString() + '人' : 'なし'}`;
 
     if (data.exportedAt) {
       const exportDate = new Date(data.exportedAt).toLocaleString('ja-JP');
@@ -1335,7 +1355,7 @@ class App {
     this.elements.importRules.checked = rulesCount > 0;
     this.elements.importSettings.disabled = !hasSettings;
     this.elements.importSettings.checked = hasSettings;
-    this.elements.importSession.disabled = !hasSession;
+    this.elements.importSession.disabled = !hasSession && globalViewersCount === 0;
     this.elements.importSession.checked = false; // セッションはデフォルトOFF
 
     this.elements.importModal.classList.remove('hidden');
@@ -1400,6 +1420,7 @@ class App {
         this.elements.eventName.value = events.eventName || 'LiveStreamEvent';
         this.elements.eventIncludeOriginal.checked = events.includeOriginal || false;
         this.elements.eventFirstComment.checked = events.firstComment !== false;
+        this.elements.eventNewViewer.checked = events.newViewer || false;
         this.elements.eventSuperChat.checked = events.superChat !== false;
         this.elements.eventMembership.checked = events.membership !== false;
         this.elements.eventMembershipGift.checked = events.membershipGift !== false;
@@ -1417,14 +1438,22 @@ class App {
     }
 
     // セッションデータのインポート
-    if (importSession && data.sessionData) {
-      this.sessionManager.importData(data.sessionData);
-      if (data.sessionData.triggeredOnce) {
-        this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
+    if (importSession) {
+      if (data.sessionData) {
+        this.sessionManager.importData(data.sessionData);
+        if (data.sessionData.triggeredOnce) {
+          this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
+        }
+        this._saveSession();
+        this._updateRulesList();
+        importedItems.push('セッションデータ');
       }
-      this._saveSession();
-      this._updateRulesList();
-      importedItems.push('セッションデータ');
+      // 全期間視聴者データのインポート
+      if (data.globalViewers) {
+        storage.importGlobalViewers(data.globalViewers);
+        const count = data.globalViewers.count || 0;
+        importedItems.push(`全期間視聴者 ${count.toLocaleString()}人`);
+      }
     }
 
     this._closeImportModal();

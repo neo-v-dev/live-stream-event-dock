@@ -12,8 +12,9 @@ class SessionManager {
     // セッション開始時刻
     this.startedAt = new Date().toISOString();
 
-    // セッションレベルのカウンター（新規メンバー数）
+    // セッションレベルのカウンター
     this.newMemberCount = 0;
+    this.newViewerCount = 0;  // セッション内の新規視聴者数
 
     // YouTube統計データ
     this.youtubeStats = {
@@ -86,6 +87,7 @@ class SessionManager {
     this.users.clear();
     this.startedAt = new Date().toISOString();
     this.newMemberCount = 0;
+    this.newViewerCount = 0;
 
     // YouTube統計もリセット
     this.youtubeStats = {
@@ -117,6 +119,7 @@ class SessionManager {
       sessionId: this.sessionId,
       startedAt: this.startedAt,
       newMemberCount: this.newMemberCount,
+      newViewerCount: this.newViewerCount,
       users: usersArray
     };
   }
@@ -131,6 +134,7 @@ class SessionManager {
       this.sessionId = data.sessionId || this._generateSessionId();
       this.startedAt = data.startedAt || new Date().toISOString();
       this.newMemberCount = data.newMemberCount || 0;
+      this.newViewerCount = data.newViewerCount || 0;
 
       // Array形式からMapに復元
       this.users.clear();
@@ -221,7 +225,7 @@ class SessionManager {
     user.messageCount++;
     user.lastSeenAt = now;
 
-    // FirstComment イベント
+    // FirstComment イベント（セッション初コメ）
     if (isFirstComment && this.eventSettings.firstComment?.enabled) {
       events.push({
         type: 'FirstComment',
@@ -229,6 +233,25 @@ class SessionManager {
           message: message.message
         }
       });
+    }
+
+    // NewViewer 判定（全期間初コメ）- カウントは常に追跡
+    if (isFirstComment) {
+      const isNewViewer = storage.addGlobalViewer(channelId);
+      if (isNewViewer) {
+        this.newViewerCount++;
+        // イベント送信は設定で有効な場合のみ
+        if (this.eventSettings.newViewer?.enabled) {
+          events.push({
+            type: 'NewViewer',
+            payload: {
+              message: message.message,
+              globalViewerCount: storage.getGlobalViewersCount(),
+              sessionNewViewerCount: this.newViewerCount
+            }
+          });
+        }
+      }
     }
 
     // スーパーチャット処理
@@ -411,6 +434,7 @@ class SessionManager {
       totalGifts,
       totalNewMembers: this.newMemberCount,
       totalMembersWithGifts: this.newMemberCount + totalGifts,
+      totalNewViewers: this.newViewerCount,
       youtube: {
         concurrentViewers: this.youtubeStats.concurrentViewers,
         likeCount: this.youtubeStats.likeCount,

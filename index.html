@@ -81,7 +81,17 @@
                 <span class="event-name">FirstComment</span>
               </label>
             </div>
-            <div class="event-details">初コメント検出</div>
+            <div class="event-details">セッション初コメント検出</div>
+          </div>
+
+          <div class="event-item" data-event="new-viewer">
+            <div class="event-header">
+              <label class="event-toggle">
+                <input type="checkbox" id="event-new-viewer">
+                <span class="event-name">NewViewer</span>
+              </label>
+            </div>
+            <div class="event-details">全期間初コメント（新規視聴者）</div>
           </div>
 
           <div class="event-item" data-event="super-chat">
@@ -250,6 +260,7 @@
                 <option value="commentCount">コメント数（全体累計）</option>
                 <option value="membership">ギフト数（全体累計）</option>
                 <option value="membershipCount">メンバー加入数（全体累計）</option>
+                <option value="newViewerCount">新規視聴者数（セッション）</option>
                 <option value="viewerCount">同時接続数</option>
                 <option value="likeCount">高評価数</option>
               </select>
@@ -369,6 +380,10 @@
                 <input type="checkbox" id="condition-include-gifts">
                 ギフトを含める
               </label>
+            </div>
+            <div class="form-group" id="condition-new-viewer-threshold-group" style="display:none;">
+              <label for="condition-new-viewer-threshold">新規視聴者数閾値 (人)</label>
+              <input type="number" id="condition-new-viewer-threshold" value="10" min="1">
             </div>
             <div class="form-group" id="condition-viewer-threshold-group" style="display:none;">
               <label for="condition-viewer-threshold">同時接続数閾値 (人)</label>

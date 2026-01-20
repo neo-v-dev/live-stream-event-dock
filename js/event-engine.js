@@ -198,6 +198,9 @@ class EventEngine {
       case 'membershipCount':
         return this._checkMembershipCount(condition, message);
 
+      case 'newViewerCount':
+        return this._checkNewViewerCount(condition, message);
+
       // YouTube統計系はprocessStats()で処理するためここではfalse
       case 'viewerCount':
       case 'likeCount':
@@ -377,6 +380,23 @@ class EventEngine {
 
     // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
     return currentCount >= threshold;
+  }
+
+  /**
+   * 新規視聴者数チェック（セッション内のNewViewer数が閾値に達した時）
+   */
+  _checkNewViewerCount(condition, message) {
+    // NewViewerイベント発生時（セッション初コメかつ全期間初コメ）のみチェック
+    // このチェックはsession-managerでNewViewerカウントが増えた直後に呼ばれる想定
+    if (!this.streamEventSender?.sessionManager) {
+      return false;
+    }
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.newViewerThreshold || 10;
+
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return stats.totalNewViewers >= threshold;
   }
 
   /**
