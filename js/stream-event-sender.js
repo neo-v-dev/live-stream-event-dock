@@ -79,6 +79,7 @@ class StreamEventSender {
       superChatTotal: stats.totalSuperChat,
       giftTotal: stats.totalGifts,
       newMemberTotal: stats.totalNewMembers,
+      newViewerTotal: stats.totalNewViewers,
       uniqueUsers: stats.uniqueUsers,
       totalMessages: stats.totalMessages,
       youtube: stats.youtube

@@ -1062,3 +1062,38 @@ details.form-group input {
   background: var(--bg-tertiary);
   border-radius: 4px;
 }
+
+/* イベントペイロード詳細 */
+.event-payload-details {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.event-payload-details summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.event-payload-details summary:hover {
+  color: var(--text-secondary);
+}
+
+.event-payload-list {
+  margin: 4px 0 0 0;
+  padding-left: 16px;
+  color: var(--text-secondary);
+}
+
+.event-payload-list li {
+  margin: 2px 0;
+}
+
+.event-payload-list code {
+  font-family: monospace;
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--accent-primary);
+}
