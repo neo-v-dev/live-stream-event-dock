@@ -22,6 +22,9 @@ class SessionManager {
     this.newMemberCount = 0;
     this.newViewerCount = 0;  // セッション内の新規視聴者数
 
+    // カスタムカウンター: name -> count
+    this.customCounters = new Map();
+
     // YouTube統計データ
     this.youtubeStats = {
       concurrentViewers: 0,
@@ -96,6 +99,7 @@ class SessionManager {
     this.startedAt = new Date().toISOString();
     this.newMemberCount = 0;
     this.newViewerCount = 0;
+    this.customCounters.clear();
 
     // YouTube統計もリセット
     this.youtubeStats = {
@@ -173,7 +177,8 @@ class SessionManager {
       startedAt: this.startedAt,
       newMemberCount: this.newMemberCount,
       newViewerCount: this.newViewerCount,
-      users: usersArray
+      users: usersArray,
+      customCounters: Object.fromEntries(this.customCounters)
     };
   }
 
@@ -189,6 +194,14 @@ class SessionManager {
       this.startedAt = data.startedAt || new Date().toISOString();
       this.newMemberCount = data.newMemberCount || 0;
       this.newViewerCount = data.newViewerCount || 0;
+
+      // カスタムカウンター復元
+      this.customCounters.clear();
+      if (data.customCounters) {
+        for (const [name, count] of Object.entries(data.customCounters)) {
+          this.customCounters.set(name, count);
+        }
+      }
 
       // Array形式からMapに復元
       this.users.clear();
@@ -497,7 +510,8 @@ class SessionManager {
         concurrentViewers: this.youtubeStats.concurrentViewers,
         likeCount: this.youtubeStats.likeCount,
         viewCount: this.youtubeStats.viewCount
-      }
+      },
+      customCounters: Object.fromEntries(this.customCounters)
     };
   }
 
@@ -534,6 +548,38 @@ class SessionManager {
       current: { ...this.youtubeStats },
       previous: { ...this.previousYoutubeStats }
     };
+  }
+
+  /**
+   * カスタムカウンターをインクリメント
+   * @param {string} name - カウンター名
+   * @param {number} amount - 増加量（デフォルト: 1）
+   * @returns {number} 更新後のカウント値
+   */
+  incrementCounter(name, amount = 1) {
+    if (!name) return 0;
+    const current = this.customCounters.get(name) || 0;
+    const newValue = current + amount;
+    this.customCounters.set(name, newValue);
+    console.log(`[Session] カウンター更新: ${name} = ${newValue}`);
+    return newValue;
+  }
+
+  /**
+   * カスタムカウンターを取得
+   * @param {string} name - カウンター名
+   * @returns {number} カウント値
+   */
+  getCounter(name) {
+    return this.customCounters.get(name) || 0;
+  }
+
+  /**
+   * 全カスタムカウンターを取得
+   * @returns {Object} カウンターオブジェクト
+   */
+  getCustomCounters() {
+    return Object.fromEntries(this.customCounters);
   }
 
   /**

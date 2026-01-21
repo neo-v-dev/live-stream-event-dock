@@ -24,6 +24,7 @@
 | コメント数（全体累計） | `commentCount` | 配信全体のコメント数 |
 | ギフト数（全体累計） | `membership` | 配信全体のギフト数 |
 | メンバー加入数（全体累計） | `membershipCount` | 配信全体のメンバー加入数 |
+| 初見さん数（全体累計） | `newViewerCount` | 配信全体の初見さん数（v1.2.0+） |
 | 同時接続数 | `viewerCount` | 同時接続数が閾値に達した時 |
 | 高評価数 | `likeCount` | 高評価数が閾値に達した時 |
 
@@ -529,7 +530,52 @@ _checkLikeCount(condition, stats) {
 
 ---
 
-## クールダウン設定
+## 初見さん数（全体累計） (newViewerCount)
+
+配信全体の初見さん数（初めてコメントしたユーザー数）が閾値に達した時に発火します。
+
+> **Note**: この機能はv1.2.0以上で利用可能です。
+
+### パラメータ
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `newViewerThreshold` | number | 発火する初見さん数（デフォルト: 10） |
+
+### 設定例
+
+```javascript
+{
+  type: "newViewerCount",
+  newViewerThreshold: 50
+}
+```
+
+### 判定ロジック
+
+```javascript
+_checkNewViewerCount(condition, message) {
+  // 初コメントでない場合はスキップ
+  if (!message.isFirstTime) return false;
+
+  const stats = this.streamEventSender.sessionManager.getStats();
+  const threshold = condition.newViewerThreshold || 10;
+
+  // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+  return stats.newViewerTotal >= threshold;
+}
+```
+
+### 注意事項
+
+- 初コメント（FirstComment）イベント発生時に判定されます
+- 閾値以上であれば発火条件を満たします
+- 連続発火を防ぐには「1度だけ送信」オプションまたはクールダウンを設定してください
+- 複数の閾値（10人、50人、100人）を設定したい場合は、それぞれ別のルールを作成してください
+
+---
+
+## 発火制御設定
 
 同一ルールの連続発火を防ぐための設定です。
 
@@ -539,11 +585,13 @@ _checkLikeCount(condition, stats) {
 |-----------|-----|------|
 | `cooldown` | number | クールダウン秒数（0で無効） |
 | `onceOnly` | boolean | セッション中1回のみ発火 |
+| `oncePerUser` | boolean | ユーザーごとに1回のみ発火（v1.2.0+） |
 
 ### 動作
 
 1. **cooldown**: 指定秒数が経過するまで同一ルールは発火しない
 2. **onceOnly**: セッション中に1度発火したら、以降は発火しない
+3. **oncePerUser**: 同じユーザーには1回だけ発火（異なるユーザーには発火する）
 
 ### 1度だけ送信（onceOnly）の詳細
 
@@ -552,21 +600,48 @@ _checkLikeCount(condition, stats) {
 - **起動済み状態はセッションデータと一緒に保存されます**（ページリロード後も維持）
 - セッションリセット時にクリアされます
 
+### ユーザーごとに1回（oncePerUser）の詳細（v1.2.0+）
+
+- 同じユーザーが再度条件を満たしても発火しません
+- 異なるユーザーが条件を満たした場合は発火します
+- ルール一覧で「ユーザー単位」のバッジが表示されます
+- **発火済みユーザーはセッションデータと一緒に保存されます**（ページリロード後も維持）
+- セッションリセット時にクリアされます
+- `onceOnly` と併用可能（その場合、どちらかの条件で発火が停止）
+
 ### 設定例
 
 ```javascript
 // 30秒のクールダウン
 {
   cooldown: 30,
-  onceOnly: false
+  onceOnly: false,
+  oncePerUser: false
 }
 
-// セッション中1回のみ
+// セッション中1回のみ（全体で1回）
 {
   cooldown: 0,
-  onceOnly: true
+  onceOnly: true,
+  oncePerUser: false
+}
+
+// ユーザーごとに1回（異なるユーザーには発火）
+{
+  cooldown: 0,
+  onceOnly: false,
+  oncePerUser: true
 }
 ```
+
+### ユースケース
+
+| シナリオ | 推奨設定 |
+|---------|---------|
+| マイルストーン演出（100コメント達成等） | `onceOnly: true` |
+| 初コメ歓迎（ユーザーごとに1回だけ歓迎） | `oncePerUser: true` |
+| コマンド反応（連打防止） | `cooldown: 10` |
+| スパチャ感謝（毎回発火） | なし |
 
 ---
 
@@ -608,6 +683,7 @@ _checkLikeCount(condition, stats) {
 {
   type: "Custom",
   timestamp: "2025-01-15T12:42:00.000Z",
+  liveChatId: "Cg0KC2FiY2RlZmdoaWpr",
   sessionId: "session_abc_123",
   user: { /* ユーザー情報 */ },
   payload: {
@@ -623,6 +699,75 @@ _checkLikeCount(condition, stats) {
   }
 }
 ```
+
+---
+
+## カスタムカウンター設定（v1.2.0+）
+
+ルール発火時にユーザー定義のカウンターをインクリメントできます。カウンター値はSessionStatsイベントに含まれて送信されます。
+
+### パラメータ
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `incrementCounter` | boolean | カウンターをインクリメントするかどうか |
+| `counterName` | string | カウンター名（英数字、アンダースコアのみ） |
+
+### 命名規則
+
+`counterName` は以下の規則に従う必要があります：
+
+- 英字またはアンダースコアで始まる
+- 使用可能文字: `a-z`, `A-Z`, `0-9`, `_`
+- 例: `morning_count`, `dice_rolls`, `greeting123`
+
+### 設定例
+
+```javascript
+{
+  name: "おはようカウンター",
+  condition: {
+    type: "match",
+    matchType: "contains",
+    patterns: ["おはよう", "おは"]
+  },
+  incrementCounter: true,
+  counterName: "morning_count"
+}
+```
+
+### SessionStatsでの送信
+
+カスタムカウンターはSessionStatsイベントの`customCounters`フィールドに含まれます：
+
+```javascript
+{
+  type: "SessionStats",
+  payload: {
+    superChatTotal: 50000,
+    giftTotal: 25,
+    // ...
+    customCounters: {
+      "morning_count": 42,
+      "dice_rolls": 15
+    }
+  }
+}
+```
+
+### ユースケース
+
+| シナリオ | 設定 |
+|---------|------|
+| 挨拶カウント | `counterName: "greeting_count"` |
+| コマンド使用回数 | `counterName: "command_usage"` |
+| 特定キーワード出現回数 | `counterName: "keyword_count"` |
+
+### 注意事項
+
+- カウンターはセッション中のみ有効です（セッションリセットでクリア）
+- 複数のルールで同じカウンター名を使用できます（カウントが合算されます）
+- カウンター値はセッションデータと一緒に保存されます（ページリロード後も維持）
 
 ---
 
@@ -742,6 +887,58 @@ _checkLikeCount(condition, stats) {
   },
   eventType: "DiceRoll",
   cooldown: 10
+}
+```
+
+### 8. ユーザーごとに1回の歓迎メッセージ
+
+```javascript
+// 各ユーザーの初コメントに1回だけ反応
+{
+  name: "初コメ歓迎",
+  condition: {
+    type: "match",
+    matchType: "contains",
+    patterns: ["初見", "初めて"]
+  },
+  eventType: "WelcomeNewViewer",
+  oncePerUser: true  // 同じユーザーには1回だけ
+}
+```
+
+### 9. 初見さんマイルストーン
+
+```javascript
+// 初見さん50人達成
+{
+  name: "初見さん50人達成",
+  condition: {
+    type: "newViewerCount",
+    newViewerThreshold: 50
+  },
+  eventType: "NewViewerMilestone",
+  customData: { count: 50 },
+  onceOnly: true
+}
+```
+
+### 10. カスタムカウンター活用
+
+```javascript
+// 挨拶カウントを集計
+{
+  name: "おはようカウンター",
+  condition: {
+    type: "match",
+    matchType: "contains",
+    patterns: ["おはよう", "おは", "good morning"],
+    logic: "or",
+    ignoreCase: true
+  },
+  eventType: "Greeting",
+  incrementCounter: true,
+  counterName: "morning_greetings",
+  cooldown: 5
 }
 ```
 

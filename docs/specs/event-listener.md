@@ -57,7 +57,7 @@
 | `Membership` | 新規メンバー | levelName |
 | `MembershipGift` | ギフト | count, sessionGiftTotal |
 | `MemberMilestone` | マイルストーン | memberMonth, userComment |
-| `SessionStats` | 累計統計 | superChatTotal, giftTotal, uniqueUsers |
+| `SessionStats` | 累計統計 | superChatTotal, giftTotal, uniqueUsers, customCounters |
 | `Comment` | コメント転送 | message |
 | `OwnerComment` | 配信者コメント | message |
 | `ModeratorComment` | モデレーターコメント | message |
@@ -172,6 +172,7 @@ tools/
   eventData: {
     type: "FirstComment",        // イベントタイプ
     timestamp: "2025-01-15T12:34:56.789Z",
+    liveChatId: "Cg0KC2FiY2RlZmdoaWpr",  // YouTube配信ID（v1.2.0+）
     sessionId: "session_xxx_yyy",
     user: {
       channelId: "UCxxxxxxxxxx",

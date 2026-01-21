@@ -82,7 +82,8 @@ class StreamEventSender {
       newViewerTotal: stats.totalNewViewers,
       uniqueUsers: stats.uniqueUsers,
       totalMessages: stats.totalMessages,
-      youtube: stats.youtube
+      youtube: stats.youtube,
+      customCounters: stats.customCounters
     });
   }
 

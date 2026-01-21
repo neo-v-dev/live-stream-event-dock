@@ -69,11 +69,14 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
 {
   type: "EventType",              // イベントタイプ（必須）
   timestamp: "ISO8601",           // イベント発生時刻（必須）
+  liveChatId: "xxx...",           // YouTube Live Chat ID（v1.2.0+）
   sessionId: "session_xxx_yyy",   // セッションID（必須）
   user: { ... },                  // ユーザー情報（任意）
   payload: { ... }                // イベント固有データ（必須）
 }
 ```
+
+> **Note**: `liveChatId` はYouTube配信ごとに固有のIDです。配信が切り替わるとこのIDも変わります。Chrome拡張機能のバージョンによっては取得できない場合があり、その場合は `null` になります。
 
 ### ユーザー情報 (user)
 
@@ -249,28 +252,36 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
 | `payload.superChatTotal` | number | スパチャ累計金額（円） |
 | `payload.giftTotal` | number | ギフト累計数 |
 | `payload.newMemberTotal` | number | 新規メンバー累計数（ギフト除く） |
+| `payload.newViewerTotal` | number | 初見さん累計数（v1.2.0+） |
 | `payload.uniqueUsers` | number | ユニークユーザー数 |
 | `payload.totalMessages` | number | 総メッセージ数 |
 | `payload.youtube` | object | YouTube統計（v1.2.0+） |
 | `payload.youtube.concurrentViewers` | number | 同時接続数 |
 | `payload.youtube.likeCount` | number | 高評価数 |
 | `payload.youtube.viewCount` | number | 総視聴回数 |
+| `payload.customCounters` | object | カスタムカウンター（v1.2.0+） |
 
 ```javascript
 {
   type: "SessionStats",
   timestamp: "2025-01-15T12:40:00.000Z",
+  liveChatId: "Cg0KC2FiY2RlZmdoaWpr",
   sessionId: "session_abc_123",
   payload: {
     superChatTotal: 50000,
     giftTotal: 25,
     newMemberTotal: 10,
+    newViewerTotal: 120,
     uniqueUsers: 150,
     totalMessages: 500,
     youtube: {
       concurrentViewers: 1234,
       likeCount: 500,
       viewCount: 12345
+    },
+    customCounters: {
+      "morning_count": 5,
+      "dice_rolls": 12
     }
   }
 }
@@ -278,6 +289,7 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
 
 > **注意**: SessionStatsにはuser情報が含まれません。
 > **注意**: `youtube`プロパティはChrome拡張機能 v1.2.0以上が必要です。未対応の場合は値が0になります。
+> **注意**: `customCounters`はルールで「カウンターに追加」を設定した場合にのみ値が含まれます。
 
 ### Comment
 
@@ -505,3 +517,4 @@ receiver.connect();
 | 1.0.0 | 2025-01-15 | 初版リリース |
 | 1.1.0 | 2025-01-18 | SessionStatsにnewMemberTotal追加、セッション持続機能追加 |
 | 1.2.0 | 2026-01-18 | viewerCount/likeCount条件追加、SessionStatsにyoutube統計追加、起動済み状態の永続化 |
+| 1.2.0 | 2026-01-21 | liveChatIdによるセッション管理、カスタムカウンター機能、ユーザーごとに1回発火制御、newViewerTotal追加 |

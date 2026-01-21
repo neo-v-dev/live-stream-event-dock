@@ -1,6 +1,8 @@
 /**
  * App - メインアプリケーション
  */
+const APP_VERSION = '1.2.0';
+
 class App {
   constructor() {
     // コンポーネント初期化
@@ -130,9 +132,13 @@ class App {
       conditionLikeThresholdGroup: document.getElementById('condition-like-threshold-group'),
       customEventType: document.getElementById('custom-event-type'),
       customData: document.getElementById('custom-data'),
+      counterEnabled: document.getElementById('counter-enabled'),
+      counterNameGroup: document.getElementById('counter-name-group'),
+      counterNameInput: document.getElementById('counter-name-input'),
       ruleCooldown: document.getElementById('rule-cooldown'),
       ruleCooldownGroup: document.getElementById('rule-cooldown-group'),
       ruleOnceOnly: document.getElementById('rule-once-only'),
+      ruleOncePerUser: document.getElementById('rule-once-per-user'),
       saveRule: document.getElementById('save-rule'),
       cancelRule: document.getElementById('cancel-rule'),
 
@@ -243,6 +249,9 @@ class App {
 
     // スーパーチャットテキスト判定チェックボックス変更時
     this.elements.superchatTextMatch.addEventListener('change', () => this._updateSuperchatTextMatchUI());
+
+    // カウンター有効チェックボックス変更時
+    this.elements.counterEnabled.addEventListener('change', () => this._updateCounterUI());
 
     // 自動イベント設定の即時保存
     const eventCheckboxes = [
@@ -742,6 +751,7 @@ class App {
 
     this._updateConditionUI();
     this._updateCooldownUI();
+    this._updateCounterUI();
     this.elements.ruleModal.classList.remove('hidden');
   }
 
@@ -751,6 +761,11 @@ class App {
   _closeRuleModal() {
     this.elements.ruleModal.classList.add('hidden');
     this.editingRuleId = null;
+    // フォームをデフォルト状態にリセット
+    this._populateRuleForm(EventEngine.getDefaultRule());
+    this._updateConditionUI();
+    this._updateCooldownUI();
+    this._updateCounterUI();
   }
 
   /**
@@ -811,6 +826,11 @@ class App {
     // 発火制御
     this.elements.ruleCooldown.value = rule.cooldown || 0;
     this.elements.ruleOnceOnly.checked = rule.onceOnly !== false; // デフォルトtrue
+    this.elements.ruleOncePerUser.checked = rule.oncePerUser || false;
+
+    // カウンター
+    this.elements.counterEnabled.checked = !!rule.counterName;
+    this.elements.counterNameInput.value = rule.counterName || '';
   }
 
   /**
@@ -841,9 +861,12 @@ class App {
     const showSuperchatTextMatch = type === 'superchat';
     this.elements.superchatTextMatchGroup.style.display = showSuperchatTextMatch ? 'block' : 'none';
     if (!showSuperchatTextMatch) {
-      // superchat以外の場合は関連UIを非表示
+      // superchat以外の場合は関連UIを非表示＆状態をリセット
+      this.elements.superchatTextMatch.checked = false;
       this.elements.superchatMatchTypeGroup.style.display = 'none';
       this.elements.superchatMatchValueGroup.style.display = 'none';
+      this.elements.superchatLogicGroup.style.display = 'none';
+      this.elements.superchatTextOptionsGroup.style.display = 'none';
     } else {
       // superchatの場合はチェックボックスの状態に応じて表示
       this._updateSuperchatTextMatchUI();
@@ -900,6 +923,14 @@ class App {
   _updateCooldownUI() {
     const onceOnly = this.elements.ruleOnceOnly.checked;
     this.elements.ruleCooldownGroup.style.display = onceOnly ? 'none' : 'block';
+  }
+
+  /**
+   * カウンターUI更新
+   */
+  _updateCounterUI() {
+    const enabled = this.elements.counterEnabled.checked;
+    this.elements.counterNameGroup.style.display = enabled ? 'block' : 'none';
   }
 
   /**
@@ -1109,7 +1140,11 @@ class App {
       customEventType: this.elements.customEventType.value.trim(),
       customData: this.elements.customData.value.trim(),
       cooldown: parseInt(this.elements.ruleCooldown.value) || 0,
-      onceOnly: this.elements.ruleOnceOnly.checked
+      onceOnly: this.elements.ruleOnceOnly.checked,
+      oncePerUser: this.elements.ruleOncePerUser.checked,
+      counterName: this.elements.counterEnabled.checked
+        ? this.elements.counterNameInput.value.trim()
+        : ''
     };
 
     // バリデーション: ルール名
@@ -1396,6 +1431,8 @@ class App {
     const sessionData = this.sessionManager.exportData();
     // 発火済みルールIDも含める
     sessionData.triggeredOnce = this.eventEngine.exportTriggeredOnce();
+    // ユーザーごとの発火状態も含める
+    sessionData.triggeredUsers = this.eventEngine.exportTriggeredUsers();
     storage.saveSessionData(sessionData);
     console.log('[App] セッション保存完了');
   }
@@ -1411,6 +1448,10 @@ class App {
         // 発火済みルールIDも復元
         if (sessionData.triggeredOnce) {
           this.eventEngine.importTriggeredOnce(sessionData.triggeredOnce);
+        }
+        // ユーザーごとの発火状態も復元
+        if (sessionData.triggeredUsers) {
+          this.eventEngine.importTriggeredUsers(sessionData.triggeredUsers);
         }
         const stats = this.sessionManager.getStats();
         console.log('[App] セッション復元完了:', {
@@ -1598,7 +1639,7 @@ class App {
 
     // エクスポートデータを構築
     const data = {
-      version: '1.1',
+      version: APP_VERSION,
       exportedAt: new Date().toISOString(),
       includes: {
         rules: includeRules,
@@ -1641,7 +1682,8 @@ class App {
     if (includeSession) {
       data.sessionData = {
         ...this.sessionManager.exportData(),
-        triggeredOnce: this.eventEngine.exportTriggeredOnce()
+        triggeredOnce: this.eventEngine.exportTriggeredOnce(),
+        triggeredUsers: this.eventEngine.exportTriggeredUsers()
       };
     }
 
@@ -1816,6 +1858,9 @@ class App {
       this.sessionManager.importData(data.sessionData);
       if (data.sessionData.triggeredOnce) {
         this.eventEngine.importTriggeredOnce(data.sessionData.triggeredOnce);
+      }
+      if (data.sessionData.triggeredUsers) {
+        this.eventEngine.importTriggeredUsers(data.sessionData.triggeredUsers);
       }
       this._saveSession();
       this._updateRulesList();

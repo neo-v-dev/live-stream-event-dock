@@ -8,6 +8,7 @@ class EventEngine {
     this.rules = [];
     this.lastTriggered = new Map(); // ルールIDごとの最終実行時刻
     this.triggeredOnce = new Set(); // 1度だけ送信したルールID
+    this.triggeredUsers = new Map(); // ルールIDごとの発火済みユーザーID Set
   }
 
   /**
@@ -56,6 +57,7 @@ class EventEngine {
       this.rules.splice(index, 1);
       this.lastTriggered.delete(id);
       this.triggeredOnce.delete(id);
+      this.triggeredUsers.delete(id);
       return true;
     }
     return false;
@@ -74,6 +76,7 @@ class EventEngine {
   resetSession() {
     this.triggeredOnce.clear();
     this.lastTriggered.clear();
+    this.triggeredUsers.clear();
     console.log('[Event] セッションリセット');
   }
 
@@ -101,6 +104,35 @@ class EventEngine {
   }
 
   /**
+   * ユーザーごとの発火状態をエクスポート（保存用）
+   * @returns {Object} ルールIDをキー、ユーザーID配列を値とするオブジェクト
+   */
+  exportTriggeredUsers() {
+    const result = {};
+    for (const [ruleId, userSet] of this.triggeredUsers) {
+      result[ruleId] = Array.from(userSet);
+    }
+    return result;
+  }
+
+  /**
+   * ユーザーごとの発火状態をインポート（復元用）
+   * @param {Object} data ルールIDをキー、ユーザーID配列を値とするオブジェクト
+   */
+  importTriggeredUsers(data) {
+    if (!data || typeof data !== 'object') return;
+    this.triggeredUsers.clear();
+    for (const [ruleId, userIds] of Object.entries(data)) {
+      if (Array.isArray(userIds)) {
+        this.triggeredUsers.set(ruleId, new Set(userIds));
+      }
+    }
+    const totalUsers = Array.from(this.triggeredUsers.values())
+      .reduce((sum, set) => sum + set.size, 0);
+    console.log('[Event] ユーザーごと発火状態復元:', totalUsers, '件');
+  }
+
+  /**
    * ユニークIDを生成
    */
   _generateId() {
@@ -122,6 +154,14 @@ class EventEngine {
         continue;
       }
 
+      // ユーザーごとに1回で既に送信済み
+      if (rule.oncePerUser && message.authorChannelId) {
+        const userSet = this.triggeredUsers.get(rule.id);
+        if (userSet && userSet.has(message.authorChannelId)) {
+          continue;
+        }
+      }
+
       // クールダウンチェック
       if (this._isOnCooldown(rule)) {
         console.log(`[Event] ルール "${rule.name}" はクールダウン中`);
@@ -140,6 +180,14 @@ class EventEngine {
 
           if (rule.onceOnly) {
             this.triggeredOnce.add(rule.id);
+          }
+
+          // ユーザーごとに1回の記録
+          if (rule.oncePerUser && message.authorChannelId) {
+            if (!this.triggeredUsers.has(rule.id)) {
+              this.triggeredUsers.set(rule.id, new Set());
+            }
+            this.triggeredUsers.get(rule.id).add(message.authorChannelId);
           }
 
           console.log(`[Event]   → カスタムイベント送信成功`);
@@ -578,6 +626,11 @@ class EventEngine {
       return;
     }
 
+    // カウンター処理
+    if (rule.counterName && this.streamEventSender.sessionManager) {
+      this.streamEventSender.sessionManager.incrementCounter(rule.counterName);
+    }
+
     const customEventType = rule.customEventType || 'Custom';
     let customData = null;
 
@@ -613,6 +666,11 @@ class EventEngine {
     if (!this.streamEventSender) {
       console.warn('[Event] StreamEventSenderが設定されていません');
       return;
+    }
+
+    // カウンター処理
+    if (rule.counterName && this.streamEventSender.sessionManager) {
+      this.streamEventSender.sessionManager.incrementCounter(rule.counterName);
     }
 
     const customEventType = rule.customEventType || 'Custom';
@@ -660,7 +718,9 @@ class EventEngine {
       customEventType: '',
       customData: '',
       cooldown: 0,
-      onceOnly: true
+      onceOnly: true,
+      oncePerUser: false,
+      counterName: ''
     };
   }
 }

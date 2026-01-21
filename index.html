@@ -166,6 +166,7 @@
                 <li><code>totalMessages</code> - 総メッセージ数</li>
                 <li><code>youtube.concurrentViewers</code> - 同時接続数</li>
                 <li><code>youtube.likeCount</code> - 高評価数</li>
+                <li><code>customCounters</code> - ルールで定義したカスタムカウンター</li>
               </ul>
             </details>
           </div>
@@ -468,11 +469,31 @@
           </fieldset>
 
           <fieldset class="form-group">
+            <legend>カウンター</legend>
+            <div class="form-group">
+              <label for="counter-name">
+                <input type="checkbox" id="counter-enabled">
+                カウンターに追加
+              </label>
+            </div>
+            <div class="form-group" id="counter-name-group" style="display:none;">
+              <label for="counter-name-input">カウンター名 <span class="hint">(SessionStatsに含まれます)</span></label>
+              <input type="text" id="counter-name-input" placeholder="例: morning_count">
+            </div>
+          </fieldset>
+
+          <fieldset class="form-group">
             <legend>発火制御</legend>
             <div class="form-group">
               <label for="rule-once-only">
                 <input type="checkbox" id="rule-once-only" checked>
                 1度だけ送信（セッション中）
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="rule-once-per-user">
+                <input type="checkbox" id="rule-once-per-user">
+                ユーザーごとに1回（セッション中）
               </label>
             </div>
             <div class="form-group" id="rule-cooldown-group" style="display:none;">
