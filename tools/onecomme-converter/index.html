@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>わんコメ → Live Stream Event Dock 変換ツール</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #00d4ff;
+      margin-bottom: 10px;
+    }
+    .description {
+      color: #888;
+      margin-bottom: 20px;
+    }
+    .section {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      margin-top: 0;
+      color: #00d4ff;
+      font-size: 1.1em;
+    }
+    .drop-zone {
+      border: 2px dashed #444;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #00d4ff;
+      background: rgba(0, 212, 255, 0.1);
+    }
+    .drop-zone input {
+      display: none;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .stat-card {
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .stat-card .value {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #00d4ff;
+    }
+    .stat-card .label {
+      color: #888;
+      font-size: 0.9em;
+    }
+    button {
+      background: #00d4ff;
+      color: #1a1a2e;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #00a8cc;
+    }
+    button:disabled {
+      background: #444;
+      cursor: not-allowed;
+    }
+    .preview {
+      max-height: 300px;
+      overflow-y: auto;
+      background: #0a0a15;
+      border-radius: 6px;
+      padding: 15px;
+      font-family: monospace;
+      font-size: 0.85em;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th {
+      background: #0f3460;
+      color: #00d4ff;
+    }
+    tr:hover {
+      background: rgba(0, 212, 255, 0.05);
+    }
+    .user-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    .mapping-info {
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+    }
+    .mapping-info code {
+      background: #1a1a2e;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #00d4ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>わんコメ → Live Stream Event Dock 変換ツール</h1>
+  <p class="description">わんコメのリスナーデータ（CSV）をLive Stream Event Dockのインポート形式（JSON）に変換します</p>
+
+  <div class="section">
+    <h2>1. CSVファイルを選択</h2>
+    <div class="drop-zone" id="dropZone">
+      <p>クリックまたはドラッグ＆ドロップでCSVファイルを選択</p>
+      <input type="file" id="fileInput" accept=".csv">
+    </div>
+  </div>
+
+  <div class="section" id="statsSection" style="display: none;">
+    <h2>2. 変換プレビュー</h2>
+    <div class="mapping-info">
+      <strong>フィールドマッピング:</strong><br>
+      <code>id</code> → channelId（yt-プレフィックス除去）<br>
+      <code>username</code> → displayName<br>
+      <code>icon</code> → profileImage<br>
+      <code>tc</code> → totalMessages<br>
+      <code>tgc</code> → totalGifts<br>
+      <code>amount</code> → totalSuperChat（マイクロ単位→円に変換）<br>
+      <code>lcts</code> → lastSeenAt / firstSeenAt
+    </div>
+    <div class="stats">
+      <div class="stat-card">
+        <div class="value" id="totalUsers">0</div>
+        <div class="label">ユーザー数</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="totalMessages">0</div>
+        <div class="label">総コメント数</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="totalSuperchat">0</div>
+        <div class="label">総スパチャ（円）</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="totalGifts">0</div>
+        <div class="label">総ギフト数</div>
+      </div>
+    </div>
+    <h3 style="margin-top: 20px;">ユーザー一覧（上位20件）</h3>
+    <table id="userTable">
+      <thead>
+        <tr>
+          <th>ユーザー</th>
+          <th>コメント数</th>
+          <th>スパチャ</th>
+          <th>ギフト</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="section" id="exportSection" style="display: none;">
+    <h2>3. エクスポート</h2>
+    <button id="downloadBtn">JSONファイルをダウンロード</button>
+    <button id="copyBtn" style="margin-left: 10px; background: #444; color: #fff;">クリップボードにコピー</button>
+    <h3 style="margin-top: 20px;">JSONプレビュー</h3>
+    <div class="preview" id="jsonPreview"></div>
+  </div>
+
+  <script>
+    let convertedData = null;
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const statsSection = document.getElementById('statsSection');
+    const exportSection = document.getElementById('exportSection');
+
+    // Drag & Drop
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) processFile(file);
+    });
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    });
+
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csv = e.target.result;
+        convertedData = convertCSV(csv);
+        displayStats(convertedData);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseCSV(csv) {
+      const lines = csv.trim().split('\n');
+      const headers = parseCSVLine(lines[0]);
+      const rows = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    }
+
+    function convertCSV(csv) {
+      const rows = parseCSV(csv);
+      const channelIds = [];
+      const users = {};
+
+      for (const row of rows) {
+        // Skip non-YouTube entries
+        if (row.service !== 'youtube') continue;
+
+        // Extract channel ID (remove "yt-" prefix)
+        const rawId = row.id || '';
+        const channelId = rawId.startsWith('yt-') ? rawId.slice(3) : rawId;
+
+        if (!channelId) continue;
+
+        channelIds.push(channelId);
+
+        // Convert amount from micros to yen (1,000,000 micros = 1 yen)
+        const amountMicros = parseInt(row.amount) || 0;
+        const amountYen = Math.floor(amountMicros / 1000000);
+
+        // Count superchat occurrences (if amount > 0, count as 1 for now)
+        const superChatCount = amountMicros > 0 ? 1 : 0;
+
+        users[channelId] = {
+          displayName: row.username || '',
+          profileImage: row.icon || '',
+          roles: {
+            isMember: false,
+            isModerator: false,
+            isOwner: false
+          },
+          stats: {
+            totalMessages: parseInt(row.tc) || 0,
+            totalSuperChat: amountYen,
+            totalSuperChatCount: superChatCount,
+            totalGifts: parseInt(row.tgc) || 0,
+            sessionCount: 1
+          },
+          lastMessage: '',
+          firstSeenAt: row.lcts || new Date().toISOString(),
+          lastSeenAt: row.lcts || new Date().toISOString()
+        };
+      }
+
+      // Live Stream Event Dockのインポート形式に合わせる
+      return {
+        globalViewers: {
+          channelIds,
+          users,
+          count: channelIds.length
+        },
+        exportedAt: new Date().toISOString()
+      };
+    }
+
+    function displayStats(data) {
+      const gv = data.globalViewers;
+
+      // Calculate totals
+      let totalMessages = 0;
+      let totalSuperchat = 0;
+      let totalGifts = 0;
+
+      const userList = Object.entries(gv.users).map(([channelId, user]) => {
+        totalMessages += user.stats.totalMessages;
+        totalSuperchat += user.stats.totalSuperChat;
+        totalGifts += user.stats.totalGifts;
+        return { channelId, ...user };
+      });
+
+      // Sort by message count
+      userList.sort((a, b) => b.stats.totalMessages - a.stats.totalMessages);
+
+      // Display stats
+      document.getElementById('totalUsers').textContent = gv.count.toLocaleString();
+      document.getElementById('totalMessages').textContent = totalMessages.toLocaleString();
+      document.getElementById('totalSuperchat').textContent = '¥' + totalSuperchat.toLocaleString();
+      document.getElementById('totalGifts').textContent = totalGifts.toLocaleString();
+
+      // Display user table
+      const tbody = document.querySelector('#userTable tbody');
+      tbody.innerHTML = userList.slice(0, 20).map(user => `
+        <tr>
+          <td>
+            <img src="${user.profileImage}" class="user-icon" onerror="this.style.display='none'">
+            ${escapeHtml(user.displayName)}
+          </td>
+          <td>${user.stats.totalMessages.toLocaleString()}</td>
+          <td>${user.stats.totalSuperChat > 0 ? '¥' + user.stats.totalSuperChat.toLocaleString() : '-'}</td>
+          <td>${user.stats.totalGifts > 0 ? user.stats.totalGifts.toLocaleString() : '-'}</td>
+        </tr>
+      `).join('');
+
+      // Display JSON preview
+      const jsonStr = JSON.stringify(data, null, 2);
+      document.getElementById('jsonPreview').textContent = jsonStr.slice(0, 5000) + (jsonStr.length > 5000 ? '\n...(truncated)' : '');
+
+      statsSection.style.display = 'block';
+      exportSection.style.display = 'block';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Download button
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      if (!convertedData) return;
+
+      const blob = new Blob([JSON.stringify(convertedData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'global-viewers-import.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Copy button
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      if (!convertedData) return;
+
+      navigator.clipboard.writeText(JSON.stringify(convertedData, null, 2)).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'コピーしました！';
+        setTimeout(() => {
+          btn.textContent = 'クリップボードにコピー';
+        }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>
