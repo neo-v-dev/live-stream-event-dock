@@ -164,6 +164,46 @@ Live Stream Event Dockは、OBS WebSocketの`BroadcastCustomEvent`を使用し�
 }
 ```
 
+### SuperSticker
+
+スーパーステッカーを受信した際に送信されます。
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `type` | string | `"SuperSticker"` |
+| `user` | object | ユーザー情報 |
+| `payload.amount` | number | 金額（円換算） |
+| `payload.amountMicros` | number | 金額（マイクロ単位） |
+| `payload.amountDisplayString` | string | 表示用金額文字列 |
+| `payload.currency` | string | 通貨コード |
+| `payload.tier` | number | スパチャティア（色レベル） |
+| `payload.stickerId` | string | ステッカーID |
+| `payload.altText` | string | ステッカーの代替テキスト |
+| `payload.sessionTotal` | number | そのユーザーのセッション内スパチャ累計 |
+| `payload.superChatCount` | number | そのユーザーのセッション内スパチャ回数 |
+| `payload.isFirstSuperchat` | boolean | セッション内初スパチャかどうか |
+
+```javascript
+{
+  type: "SuperSticker",
+  timestamp: "2025-01-15T12:35:00.000Z",
+  sessionId: "session_abc_123",
+  user: { /* ユーザー情報 */ },
+  payload: {
+    amount: 500,
+    amountMicros: 500000000,
+    amountDisplayString: "¥500",
+    currency: "JPY",
+    tier: 3,
+    stickerId: "CAMSBggIEAIYAQ",
+    altText: "ステッカー名",
+    sessionTotal: 500,
+    superChatCount: 1,
+    isFirstSuperchat: true
+  }
+}
+```
+
 ### Membership
 
 新規メンバーが加入した際に送信されます。
@@ -518,3 +558,4 @@ receiver.connect();
 | 1.1.0 | 2025-01-18 | SessionStatsにnewMemberTotal追加、セッション持続機能追加 |
 | 1.2.0 | 2026-01-18 | viewerCount/likeCount条件追加、SessionStatsにyoutube統計追加、起動済み状態の永続化 |
 | 1.2.0 | 2026-01-21 | liveChatIdによるセッション管理、カスタムカウンター機能、ユーザーごとに1回発火制御、newViewerTotal追加 |
+| 1.2.1 | 2026-01-24 | SuperStickerイベントをSuperChatから分離 |

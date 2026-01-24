@@ -427,21 +427,36 @@ class OBSController {
       isMember: authorDetails.isChatSponsor || false,
       isFirstComment: isFirstComment,
       superchat: null,
+      superSticker: null,
       membershipGift: null,
       memberMilestone: null,
       newSponsor: false
     };
 
     // スーパーチャット
-    if (type === 'superChatEvent' || type === 'superStickerEvent') {
-      const details = snippet.superChatDetails || snippet.superStickerDetails || {};
+    if (type === 'superChatEvent') {
+      const details = snippet.superChatDetails || {};
       message.superchat = {
         amount: details.amountDisplayString || '',
         amountMicros: details.amountMicros || '0',
         currency: details.currency || 'JPY',
         tier: details.tier || 0
       };
-      message.message = snippet.superChatDetails?.userComment || snippet.displayMessage || '';
+      message.message = details.userComment || snippet.displayMessage || '';
+    }
+
+    // スーパーステッカー
+    if (type === 'superStickerEvent') {
+      const details = snippet.superStickerDetails || {};
+      message.superSticker = {
+        amount: details.amountDisplayString || '',
+        amountMicros: details.amountMicros || '0',
+        currency: details.currency || 'JPY',
+        tier: details.tier || 0,
+        stickerId: details.superStickerMetadata?.stickerId || '',
+        altText: details.superStickerMetadata?.altText || ''
+      };
+      message.message = snippet.displayMessage || '';
     }
 
     // メンバーシップギフト

@@ -21,6 +21,8 @@
 | テキスト一致 | `match` | メッセージ内容で判定 |
 | コマンド | `command` | `!xxx` 形式のコマンド |
 | スーパーチャット | `superchat` | スパチャ受信時 |
+| スーパーステッカー | `superSticker` | スーパーステッカー受信時（v1.2.1+） |
+| スパチャ/ステッカー | `superAll` | スパチャまたはステッカー受信時（v1.2.1+） |
 | コメント数（全体累計） | `commentCount` | 配信全体のコメント数 |
 | ギフト数（全体累計） | `membership` | 配信全体のギフト数 |
 | メンバー加入数（全体累計） | `membershipCount` | 配信全体のメンバー加入数 |
@@ -303,6 +305,179 @@ _checkCommand(condition, message) {
   textMatchIgnoreCase: true
 }
 ```
+
+---
+
+## スーパーステッカー (superSticker)
+
+スーパーステッカー受信時に発火します。3つのモードがあります。
+
+> **Note**: この機能はv1.2.1以上で利用可能です。
+
+### モード一覧
+
+| モード | 内部名 | 説明 |
+|--------|--------|------|
+| 毎回 | `everyTime` | ステッカー受信ごとに発火 |
+| 回数（全体） | `count` | 配信全体のステッカー回数が閾値に達した時 |
+| 累計金額（全体） | `total` | 配信全体のステッカー累計が閾値に達した時 |
+
+### 毎回モード (everyTime)
+
+スーパーステッカーを受信するたびに発火します。最低金額でフィルタ可能です。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `mode` | string | `"everyTime"` |
+| `minAmount` | number | 最低金額（円）、0で全て |
+
+```javascript
+{
+  type: "superSticker",
+  mode: "everyTime",
+  minAmount: 500  // 500円以上で発火
+}
+```
+
+### 回数モード (count)
+
+配信全体のステッカー回数が指定回数に達した時に発火します。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `mode` | string | `"count"` |
+| `countThreshold` | number | 回数閾値 |
+
+```javascript
+{
+  type: "superSticker",
+  mode: "count",
+  countThreshold: 10  // 10回以上のステッカーで発火
+}
+```
+
+> **注意**: 回数・累計金額モードでは、スーパーチャットと合算したカウントが使用されます（`superChatCount`/`superChatTotal`）。
+
+### 累計金額モード (total)
+
+配信全体のステッカー累計金額が指定金額に達した時に発火します。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `mode` | string | `"total"` |
+| `totalThreshold` | number | 累計金額閾値（円） |
+
+```javascript
+{
+  type: "superSticker",
+  mode: "total",
+  totalThreshold: 10000  // 累計1万円達成時に発火
+}
+```
+
+### スーパーチャットとの違い
+
+| 項目 | スーパーチャット | スーパーステッカー |
+|------|-----------------|-------------------|
+| テキスト判定 | ✅ 可能 | ❌ 不可（テキストなし） |
+| 毎回モード発火 | SuperChat受信時 | SuperSticker受信時 |
+| 回数/累計金額 | 合算カウント使用 | 合算カウント使用 |
+
+---
+
+## スパチャ/ステッカー (superAll)
+
+スーパーチャットまたはスーパーステッカーのどちらかを受信した時に発火します。3つのモードがあります。
+
+> **Note**: この機能はv1.2.1以上で利用可能です。
+
+### モード一覧
+
+| モード | 内部名 | 説明 |
+|--------|--------|------|
+| 毎回 | `everyTime` | スパチャまたはステッカー受信ごとに発火 |
+| 回数（全体） | `count` | 配信全体の回数が閾値に達した時 |
+| 累計金額（全体） | `total` | 配信全体の累計が閾値に達した時 |
+
+### 毎回モード (everyTime)
+
+スーパーチャットまたはスーパーステッカーを受信するたびに発火します。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `mode` | string | `"everyTime"` |
+| `minAmount` | number | 最低金額（円）、0で全て |
+
+```javascript
+{
+  type: "superAll",
+  mode: "everyTime",
+  minAmount: 500  // 500円以上で発火
+}
+```
+
+### 回数モード (count)
+
+配信全体のスパチャ+ステッカー回数が指定回数に達した時に発火します。
+
+```javascript
+{
+  type: "superAll",
+  mode: "count",
+  countThreshold: 10  // 合計10回以上で発火
+}
+```
+
+### 累計金額モード (total)
+
+配信全体のスパチャ+ステッカー累計金額が指定金額に達した時に発火します。
+
+```javascript
+{
+  type: "superAll",
+  mode: "total",
+  totalThreshold: 10000  // 累計1万円達成時に発火
+}
+```
+
+### テキスト判定オプション
+
+スパチャ/ステッカー条件でもテキスト判定を追加できます。ただし、スーパーステッカーにはテキストがないため、**スーパーチャットのみがテキスト判定の対象**となります。
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| `textMatch` | boolean | テキスト判定を有効にする |
+| `textMatchType` | string | 一致タイプ |
+| `textMatchPatterns` | string[] | 検索テキストの配列 |
+| `textMatchLogic` | string | 複数パターン時の組み合わせ |
+| `textMatchIgnoreCase` | boolean | 大文字・小文字を区別しない |
+| `textMatchNormalizeWidth` | boolean | 半角・全角を区別しない |
+
+```javascript
+// スパチャまたはステッカー500円以上
+// ただしスパチャの場合は「応援」を含む場合のみ
+{
+  type: "superAll",
+  mode: "everyTime",
+  minAmount: 500,
+  textMatch: true,
+  textMatchType: "contains",
+  textMatchPatterns: ["応援"],
+  textMatchIgnoreCase: true
+}
+```
+
+> **注意**: テキスト判定を有効にした場合、スーパーステッカーはテキストがないため判定をスキップし、スーパーチャットのみが発火対象となります。
+
+### 条件タイプの使い分け
+
+| シナリオ | 推奨タイプ |
+|---------|-----------|
+| スパチャのみを対象にしたい | `superchat` |
+| ステッカーのみを対象にしたい | `superSticker` |
+| 両方をまとめて感謝したい | `superAll` |
+| スパチャのテキストで判定したい | `superchat` または `superAll` |
+| 合計金額でマイルストーン | どれでも同じ結果（合算カウント） |
 
 ---
 

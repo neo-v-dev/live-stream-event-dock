@@ -230,12 +230,24 @@ class EventEngine {
 
       case 'superchat':
         return this._checkSuperchat(condition, message);
-
       case 'superchatCount':
         return this._checkSuperchatCount(condition, message);
-
       case 'superchatTotal':
         return this._checkSuperchatTotal(condition, message);
+
+      case 'superSticker':
+        return this._checkSuperSticker(condition, message);
+      case 'superStickerCount':
+        return this._checkSuperStickerCount(condition, message);
+      case 'superStickerTotal':
+        return this._checkSuperStickerTotal(condition, message);
+
+      case 'superAll':
+        return this._checkSuperAll(condition, message);
+      case 'superAllCount':
+        return this._checkSuperAllCount(condition, message);
+      case 'superAllTotal':
+        return this._checkSuperAllTotal(condition, message);
 
       case 'commentCount':
         return this._checkCommentCount(condition, message);
@@ -366,7 +378,7 @@ class EventEngine {
   }
 
   /**
-   * スーパーチャットチェック
+   * スーパーチャットチェック（毎回モード）
    */
   _checkSuperchat(condition, message) {
     if (!message.superchat) return false;
@@ -381,6 +393,49 @@ class EventEngine {
 
     // テキスト判定（有効な場合のみ）
     if (!this._checkSuperchatTextMatch(condition, message)) return false;
+
+    return true;
+  }
+
+  /**
+   * スーパーステッカーチェック（毎回モード）
+   */
+  _checkSuperSticker(condition, message) {
+    if (!message.superSticker) return false;
+
+    // 最低金額チェック
+    if (condition.minAmount && condition.minAmount > 0) {
+      const amountYen = parseInt(message.superSticker.amountMicros) / 1000000;
+      if (amountYen < condition.minAmount) {
+        return false;
+      }
+    }
+
+    // SuperStickerにはテキストがないためテキスト判定はスキップ
+    return true;
+  }
+
+  /**
+   * スパチャ/ステッカー両方チェック（毎回モード）
+   */
+  _checkSuperAll(condition, message) {
+    const hasSuperchat = !!message.superchat;
+    const hasSuperSticker = !!message.superSticker;
+    if (!hasSuperchat && !hasSuperSticker) return false;
+
+    // 最低金額チェック
+    if (condition.minAmount && condition.minAmount > 0) {
+      const data = message.superchat || message.superSticker;
+      const amountYen = parseInt(data.amountMicros) / 1000000;
+      if (amountYen < condition.minAmount) {
+        return false;
+      }
+    }
+
+    // テキスト判定（SuperChatの場合のみ）
+    if (hasSuperchat && !this._checkSuperchatTextMatch(condition, message)) {
+      return false;
+    }
 
     return true;
   }
@@ -495,6 +550,82 @@ class EventEngine {
     const previousTotal = stats.totalSuperChat - currentAmount;
 
     // 今回のスパチャで閾値を超えた場合のみトリガー（以前は未達だった）
+    return previousTotal < threshold && stats.totalSuperChat >= threshold;
+  }
+
+  /**
+   * スーパーステッカー回数チェック（全体の累計回数が閾値に達した時）
+   */
+  _checkSuperStickerCount(condition, message) {
+    if (!message.superSticker) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.countThreshold || 3;
+
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    // 注: カウントはSuperChat+SuperStickerの合計を使用
+    return stats.totalSuperChatCount >= threshold;
+  }
+
+  /**
+   * スーパーステッカー累計金額チェック（全体の累計金額が閾値に達した時）
+   */
+  _checkSuperStickerTotal(condition, message) {
+    if (!message.superSticker) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.totalThreshold || 10000;
+    const currentAmount = this._parseSuperchatAmount(message.superSticker);
+    const previousTotal = stats.totalSuperChat - currentAmount;
+
+    // 今回のステッカーで閾値を超えた場合のみトリガー（以前は未達だった）
+    return previousTotal < threshold && stats.totalSuperChat >= threshold;
+  }
+
+  /**
+   * スパチャ/ステッカー両方の回数チェック（全体の累計回数が閾値に達した時）
+   */
+  _checkSuperAllCount(condition, message) {
+    const hasSuperchat = !!message.superchat;
+    const hasSuperSticker = !!message.superSticker;
+    if (!hasSuperchat && !hasSuperSticker) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    // テキスト判定（SuperChatの場合のみ）
+    if (hasSuperchat && !this._checkSuperchatTextMatch(condition, message)) {
+      return false;
+    }
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.countThreshold || 3;
+
+    // 閾値以上でトリガー（連続発火防止はonceOnly/cooldownで制御）
+    return stats.totalSuperChatCount >= threshold;
+  }
+
+  /**
+   * スパチャ/ステッカー両方の累計金額チェック（全体の累計金額が閾値に達した時）
+   */
+  _checkSuperAllTotal(condition, message) {
+    const hasSuperchat = !!message.superchat;
+    const hasSuperSticker = !!message.superSticker;
+    if (!hasSuperchat && !hasSuperSticker) return false;
+    if (!this.streamEventSender?.sessionManager) return false;
+
+    // テキスト判定（SuperChatの場合のみ）
+    if (hasSuperchat && !this._checkSuperchatTextMatch(condition, message)) {
+      return false;
+    }
+
+    const stats = this.streamEventSender.sessionManager.getStats();
+    const threshold = condition.totalThreshold || 10000;
+    const data = message.superchat || message.superSticker;
+    const currentAmount = this._parseSuperchatAmount(data);
+    const previousTotal = stats.totalSuperChat - currentAmount;
+
+    // 今回で閾値を超えた場合のみトリガー（以前は未達だった）
     return previousTotal < threshold && stats.totalSuperChat >= threshold;
   }
 

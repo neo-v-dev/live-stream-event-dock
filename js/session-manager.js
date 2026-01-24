@@ -50,6 +50,7 @@ class SessionManager {
       forwardComments: { enabled: false },
       firstComment: { enabled: true },
       superChat: { enabled: true },
+      superSticker: { enabled: true },
       membership: { enabled: true },
       membershipGift: { enabled: true },
       memberMilestone: { enabled: true },
@@ -69,6 +70,7 @@ class SessionManager {
       forwardComments: settings.forwardComments || { enabled: false },
       firstComment: settings.firstComment || { enabled: true },
       superChat: settings.superChat || { enabled: true },
+      superSticker: settings.superSticker || { enabled: true },
       membership: settings.membership || { enabled: true },
       membershipGift: settings.membershipGift || { enabled: true },
       memberMilestone: settings.memberMilestone || { enabled: true },
@@ -342,6 +344,33 @@ class SessionManager {
             currency: message.superchat.currency || 'JPY',
             tier: message.superchat.tier || 0,
             message: message.message,
+            sessionTotal: user.superChatTotal,
+            superChatCount: user.superChatCount,
+            isFirstSuperchat
+          }
+        });
+      }
+    }
+
+    // スーパーステッカー処理
+    if (message.superSticker) {
+      const amount = this._parseAmount(message.superSticker);
+      const isFirstSuperchat = user.superChatCount === 0;
+
+      user.superChatTotal += amount;
+      user.superChatCount++;
+
+      if (this.eventSettings.superSticker?.enabled) {
+        events.push({
+          type: 'SuperSticker',
+          payload: {
+            amount,
+            amountMicros: parseInt(message.superSticker.amountMicros) || 0,
+            amountDisplayString: message.superSticker.amount,
+            currency: message.superSticker.currency || 'JPY',
+            tier: message.superSticker.tier || 0,
+            stickerId: message.superSticker.stickerId || '',
+            altText: message.superSticker.altText || '',
             sessionTotal: user.superChatTotal,
             superChatCount: user.superChatCount,
             isFirstSuperchat

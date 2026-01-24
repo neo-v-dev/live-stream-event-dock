@@ -1,6 +1,6 @@
 # Live Stream Event Dock
 
-**バージョン: 1.2.0**
+**バージョン: 1.2.1**
 
 YouTubeライブ配信のチャットイベントをOBS Studioに連携するためのブラウザドックツールです。
 
@@ -416,7 +416,7 @@ stream_manager/
 
 | 項目 | 内容 |
 |------|------|
-| アプリバージョン | 1.2.0 |
+| アプリバージョン | 1.2.1 |
 | OBS WebSocket Protocol | v5.x |
 | イベント配信方式 | `BroadcastCustomEvent` |
 | デフォルトイベント名 | `LiveStreamEvent` |
@@ -427,6 +427,9 @@ stream_manager/
 ---
 
 ## 更新履歴
+
+### v1.2.1
+- SuperStickerイベントをSuperChatから分離
 
 ### v1.2.0
 - liveChatIdによる自動セッション管理

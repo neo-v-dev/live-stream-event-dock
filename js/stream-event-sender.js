@@ -56,8 +56,8 @@ class StreamEventSender {
       await this.sendEvent(event.type, event.payload, message);
     }
 
-    // スパチャまたはギフト時にセッション統計を送信
-    if (message.superchat || message.membershipGift) {
+    // スパチャ/ステッカーまたはギフト時にセッション統計を送信
+    if (message.superchat || message.superSticker || message.membershipGift) {
       if (this.sessionManager.eventSettings.sessionStats?.enabled) {
         await this.sendSessionStats();
       }

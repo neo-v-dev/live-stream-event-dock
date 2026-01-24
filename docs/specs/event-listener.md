@@ -54,6 +54,7 @@
 |--------|------|-------------|
 | `FirstComment` | 初コメント | message |
 | `SuperChat` | スパチャ | amount, currency, message, sessionTotal |
+| `SuperSticker` | スーパーステッカー | amount, currency, stickerId, altText |
 | `Membership` | 新規メンバー | levelName |
 | `MembershipGift` | ギフト | count, sessionGiftTotal |
 | `MemberMilestone` | マイルストーン | memberMonth, userComment |

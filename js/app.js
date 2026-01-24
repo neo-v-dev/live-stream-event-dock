@@ -1,7 +1,7 @@
 /**
  * App - メインアプリケーション
  */
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 
 class App {
   constructor() {
@@ -149,6 +149,7 @@ class App {
       eventFirstComment: document.getElementById('event-first-comment'),
       eventNewViewer: document.getElementById('event-new-viewer'),
       eventSuperChat: document.getElementById('event-super-chat'),
+      eventSuperSticker: document.getElementById('event-super-sticker'),
       eventMembership: document.getElementById('event-membership'),
       eventMembershipGift: document.getElementById('event-membership-gift'),
       eventMemberMilestone: document.getElementById('event-member-milestone'),
@@ -399,6 +400,7 @@ class App {
     this.elements.eventFirstComment.checked = eventSettings.firstComment?.enabled !== false;
     this.elements.eventNewViewer.checked = eventSettings.newViewer?.enabled || false;
     this.elements.eventSuperChat.checked = eventSettings.superChat?.enabled !== false;
+    this.elements.eventSuperSticker.checked = eventSettings.superSticker?.enabled !== false;
     this.elements.eventMembership.checked = eventSettings.membership?.enabled !== false;
     this.elements.eventMembershipGift.checked = eventSettings.membershipGift?.enabled !== false;
     this.elements.eventMemberMilestone.checked = eventSettings.memberMilestone?.enabled !== false;
@@ -426,6 +428,7 @@ class App {
       firstComment: { enabled: this.elements.eventFirstComment.checked },
       newViewer: { enabled: this.elements.eventNewViewer.checked },
       superChat: { enabled: this.elements.eventSuperChat.checked },
+      superSticker: { enabled: this.elements.eventSuperSticker.checked },
       membership: { enabled: this.elements.eventMembership.checked },
       membershipGift: { enabled: this.elements.eventMembershipGift.checked },
       memberMilestone: { enabled: this.elements.eventMemberMilestone.checked },
@@ -789,6 +792,24 @@ class App {
       }
       conditionType = 'superchat';
     }
+    // スーパーステッカー系
+    if (['superSticker', 'superStickerCount', 'superStickerTotal'].includes(conditionType)) {
+      if (conditionType === 'superStickerCount') {
+        superchatMode = 'count';
+      } else if (conditionType === 'superStickerTotal') {
+        superchatMode = 'total';
+      }
+      conditionType = 'superSticker';
+    }
+    // スパチャ/ステッカー両方系
+    if (['superAll', 'superAllCount', 'superAllTotal'].includes(conditionType)) {
+      if (conditionType === 'superAllCount') {
+        superchatMode = 'count';
+      } else if (conditionType === 'superAllTotal') {
+        superchatMode = 'total';
+      }
+      conditionType = 'superAll';
+    }
 
     this.elements.conditionType.value = conditionType;
     this._setSuperchatMode(superchatMode);
@@ -848,27 +869,30 @@ class App {
     const showValue = ['match', 'command'].includes(type);
     this.elements.conditionValueGroup.style.display = showValue ? 'block' : 'none';
 
-    // スーパーチャットモードタブの表示/非表示
-    const showSuperchatMode = type === 'superchat';
-    this.elements.superchatModeGroup.style.display = showSuperchatMode ? 'block' : 'none';
+    // スーパーチャット系タイプ（共通処理用）
+    const isSuperType = ['superchat', 'superSticker', 'superAll'].includes(type);
 
-    // 金額入力の表示/非表示（superchat時、everyTimeのみ）
+    // スーパーチャットモードタブの表示/非表示
+    this.elements.superchatModeGroup.style.display = isSuperType ? 'block' : 'none';
+
+    // 金額入力の表示/非表示（スパチャ系、everyTimeのみ）
     // 回数・累計金額は全体累計なので最低金額フィルタは不要
-    const showAmount = type === 'superchat' && superchatMode === 'everyTime';
+    const showAmount = isSuperType && superchatMode === 'everyTime';
     this.elements.conditionAmountGroup.style.display = showAmount ? 'block' : 'none';
 
-    // スーパーチャットテキスト判定の表示/非表示（superchat時のみ）
-    const showSuperchatTextMatch = type === 'superchat';
+    // スーパーチャットテキスト判定の表示/非表示（superchat, superAll時のみ）
+    // superStickerはテキストがないので対象外
+    const showSuperchatTextMatch = ['superchat', 'superAll'].includes(type);
     this.elements.superchatTextMatchGroup.style.display = showSuperchatTextMatch ? 'block' : 'none';
     if (!showSuperchatTextMatch) {
-      // superchat以外の場合は関連UIを非表示＆状態をリセット
+      // superchat/superAll以外の場合は関連UIを非表示＆状態をリセット
       this.elements.superchatTextMatch.checked = false;
       this.elements.superchatMatchTypeGroup.style.display = 'none';
       this.elements.superchatMatchValueGroup.style.display = 'none';
       this.elements.superchatLogicGroup.style.display = 'none';
       this.elements.superchatTextOptionsGroup.style.display = 'none';
     } else {
-      // superchatの場合はチェックボックスの状態に応じて表示
+      // superchat/superAllの場合はチェックボックスの状態に応じて表示
       this._updateSuperchatTextMatchUI();
     }
 
@@ -876,12 +900,12 @@ class App {
     const showThreshold = type === 'commentCount';
     this.elements.conditionThresholdGroup.style.display = showThreshold ? 'block' : 'none';
 
-    // 回数閾値の表示/非表示（superchat時、count）
-    const showCountThreshold = type === 'superchat' && superchatMode === 'count';
+    // 回数閾値の表示/非表示（スパチャ系、count）
+    const showCountThreshold = isSuperType && superchatMode === 'count';
     this.elements.conditionCountThresholdGroup.style.display = showCountThreshold ? 'block' : 'none';
 
-    // 累計金額閾値の表示/非表示（superchat時、total）
-    const showTotalThreshold = type === 'superchat' && superchatMode === 'total';
+    // 累計金額閾値の表示/非表示（スパチャ系、total）
+    const showTotalThreshold = isSuperType && superchatMode === 'total';
     this.elements.conditionTotalThresholdGroup.style.display = showTotalThreshold ? 'block' : 'none';
 
     // ギフト閾値の表示/非表示（membership時のみ）
@@ -1094,15 +1118,15 @@ class App {
   _saveRule() {
     let conditionType = this.elements.conditionType.value;
 
-    // スーパーチャットの場合、モードに応じて実際の条件タイプを決定
-    if (conditionType === 'superchat') {
+    // スーパーチャット/ステッカー系の場合、モードに応じて実際の条件タイプを決定
+    if (['superchat', 'superSticker', 'superAll'].includes(conditionType)) {
       const superchatMode = this.elements.superchatMode.value;
       if (superchatMode === 'count') {
-        conditionType = 'superchatCount';
+        conditionType = conditionType + 'Count';
       } else if (superchatMode === 'total') {
-        conditionType = 'superchatTotal';
+        conditionType = conditionType + 'Total';
       }
-      // everyTimeの場合は'superchat'のまま
+      // everyTimeの場合はそのまま
     }
 
     const patterns = this._getPatterns('condition');
@@ -1160,7 +1184,8 @@ class App {
     }
 
     // バリデーション: スーパーチャットテキスト判定（有効時は検索テキスト必須）
-    if (['superchat', 'superchatCount', 'superchatTotal'].includes(conditionType) &&
+    const superchatTypes = ['superchat', 'superchatCount', 'superchatTotal', 'superAll', 'superAllCount', 'superAllTotal'];
+    if (superchatTypes.includes(conditionType) &&
         rule.condition.textMatch && rule.condition.textMatchPatterns.length === 0) {
       this._showToast('検索テキストを入力してください', 'error');
       return;
@@ -1278,6 +1303,12 @@ class App {
       superchat: 'スパチャ（毎回）',
       superchatCount: 'スパチャ（回数）',
       superchatTotal: 'スパチャ（累計）',
+      superSticker: 'ステッカー（毎回）',
+      superStickerCount: 'ステッカー（回数）',
+      superStickerTotal: 'ステッカー（累計）',
+      superAll: 'スパチャ/ステッカー（毎回）',
+      superAllCount: 'スパチャ/ステッカー（回数）',
+      superAllTotal: 'スパチャ/ステッカー（累計）',
       commentCount: 'コメント数',
       membership: 'メンバーシップ',
       membershipCount: 'メンバー加入数',
@@ -1318,11 +1349,13 @@ class App {
       }
     }
 
-    if (condition.type === 'superchat' && condition.minAmount > 0) {
+    // スパチャ/ステッカー系の毎回モード
+    if (['superchat', 'superSticker', 'superAll'].includes(condition.type) && condition.minAmount > 0) {
       text += ` (¥${condition.minAmount}以上)`;
     }
 
-    if (condition.type === 'superchatCount') {
+    // スパチャ/ステッカー系の回数モード
+    if (['superchatCount', 'superStickerCount', 'superAllCount'].includes(condition.type)) {
       let detail = `${condition.countThreshold || 3}回以上`;
       if (condition.minAmount > 0) {
         detail += ` ¥${condition.minAmount}以上`;
@@ -1330,12 +1363,15 @@ class App {
       text += ` (${detail})`;
     }
 
-    if (condition.type === 'superchatTotal') {
+    // スパチャ/ステッカー系の累計モード
+    if (['superchatTotal', 'superStickerTotal', 'superAllTotal'].includes(condition.type)) {
       text += ` (¥${condition.totalThreshold || 10000}達成)`;
     }
 
-    // スーパーチャットのテキスト判定（複数パターン対応）
-    if (['superchat', 'superchatCount', 'superchatTotal'].includes(condition.type) && condition.textMatch) {
+    // スーパーチャット/全体のテキスト判定（複数パターン対応）
+    // 注: superStickerはテキスト判定なし
+    const textMatchTypes = ['superchat', 'superchatCount', 'superchatTotal', 'superAll', 'superAllCount', 'superAllTotal'];
+    if (textMatchTypes.includes(condition.type) && condition.textMatch) {
       const scPatterns = condition.textMatchPatterns || (condition.textMatchValue ? [condition.textMatchValue] : []);
       if (scPatterns.length > 0) {
         const matchLabel = matchTypeLabels[condition.textMatchType] || '含有';
@@ -1667,6 +1703,7 @@ class App {
           firstComment: this.elements.eventFirstComment.checked,
           newViewer: this.elements.eventNewViewer.checked,
           superChat: this.elements.eventSuperChat.checked,
+          superSticker: this.elements.eventSuperSticker.checked,
           membership: this.elements.eventMembership.checked,
           membershipGift: this.elements.eventMembershipGift.checked,
           memberMilestone: this.elements.eventMemberMilestone.checked,
@@ -1838,6 +1875,7 @@ class App {
         this.elements.eventFirstComment.checked = events.firstComment !== false;
         this.elements.eventNewViewer.checked = events.newViewer || false;
         this.elements.eventSuperChat.checked = events.superChat !== false;
+        this.elements.eventSuperSticker.checked = events.superSticker !== false;
         this.elements.eventMembership.checked = events.membership !== false;
         this.elements.eventMembershipGift.checked = events.membershipGift !== false;
         this.elements.eventMemberMilestone.checked = events.memberMilestone !== false;
