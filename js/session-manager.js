@@ -49,6 +49,7 @@ class SessionManager {
     this.eventSettings = {
       forwardComments: { enabled: false },
       firstComment: { enabled: true },
+      newViewer: { enabled: false },
       superChat: { enabled: true },
       superSticker: { enabled: true },
       membership: { enabled: true },
@@ -69,6 +70,7 @@ class SessionManager {
     Object.assign(this.eventSettings, {
       forwardComments: settings.forwardComments || { enabled: false },
       firstComment: settings.firstComment || { enabled: true },
+      newViewer: settings.newViewer || { enabled: false },
       superChat: settings.superChat || { enabled: true },
       superSticker: settings.superSticker || { enabled: true },
       membership: settings.membership || { enabled: true },
